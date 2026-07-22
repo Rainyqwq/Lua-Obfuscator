@@ -202,7 +202,7 @@ print("Key: " .. string.format("0x%X", secret_key))</textarea>
 <div class="footer">Lua Obfuscator v2.6.0 · Author: Rainy_qwq · <a href="https://github.com/Rainyqwq/Lua-Obfuscator" target="_blank" style="color:var(--accent)">GitHub</a> · MIT License</div>
 
 <!-- Fengari Lua VM -->
-<script src="https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js?v=1784706712"></script>
+<script src="lib/fengari-web.js"></script>
 
 <script>
 // ============================================================
@@ -210,6 +210,24 @@ print("Key: " .. string.format("0x%X", secret_key))</textarea>
 // Lua Obfuscator Engine (Fengari bridge)
 // ============================================================
 let _luaObfuscatorReady = false;
+
+
+// Strip only a leading Lua shebang (optional UTF-8 BOM / leading whitespace).
+// Never search mid-source: bundle embeds modules then obfuscator; a middle #!
+// would wipe package.preload and break require in browser.
+function stripLeadingLuaShebang(code) {
+  if (typeof code !== 'string' || !code) return code;
+  // UTF-8 BOM
+  if (code.charCodeAt(0) === 0xFEFF) code = code.slice(1);
+  // leading blank lines / spaces
+  let i = 0;
+  while (i < code.length && (code[i] === ' ' || code[i] === '\t' || code[i] === '\r' || code[i] === '\n')) i++;
+  if (code.startsWith('#!', i)) {
+    const nl = code.indexOf('\n', i);
+    code = nl >= 0 ? code.slice(nl + 1) : '';
+  }
+  return code;
+}
 
 function initLuaObfuscator() {
   try {
@@ -223,9 +241,7 @@ function initLuaObfuscator() {
 
     // Step 1: Load vm_protect module
     let vmCode = VM_PROTECT_LUA;
-    // Strip shebang: find #! and skip to next newline
-    const vmShebangIdx = vmCode.indexOf('#!');
-    if (vmShebangIdx >= 0) vmCode = vmCode.substring(vmCode.indexOf('\n', vmShebangIdx) + 1);
+    vmCode = stripLeadingLuaShebang(vmCode);
     let status = lauxlib.luaL_loadbuffer(L, fengari.to_luastring(vmCode), vmCode.length, fengari.to_luastring('=vm_protect'));
     if (status !== lua.LUA_OK) throw new Error('vm_protect load: ' + lua.lua_tojsstring(L, -1));
     status = lua.lua_pcall(L, 0, 1, 0);
@@ -252,13 +268,11 @@ function initLuaObfuscator() {
 
     // Step 3: Load obfuscator module
     let obfCode = OBFUSCATOR_LUA;
-    // Strip shebang line (may start with \n before #!)
-    const shebangIdx = obfCode.indexOf('#!');
-    if (shebangIdx >= 0) obfCode = obfCode.substring(obfCode.indexOf('\n', shebangIdx) + 1);
+    obfCode = stripLeadingLuaShebang(obfCode);
     status = lauxlib.luaL_loadbuffer(L, fengari.to_luastring(obfCode), obfCode.length, fengari.to_luastring('=obfuscator'));
     if (status !== lua.LUA_OK) throw new Error('obfuscator load: ' + lua.lua_tojsstring(L, -1));
     status = lua.lua_pcall(L, 0, 1, 0);
-    if (status !== lua.LUA_OK) throw new Error('obfuscator init: ' + lua.lua_tojsstring(L, -1));
+    if (status !== lua.LUA_OK) throw new Error('obfuscator init: ' + lua.lua_tojsstring(L, -1) + ' | len=' + obfCode.length + ' preload=' + (obfCode.indexOf('package.preload') >= 0));
     lua.lua_setglobal(L, fengari.to_luastring('_obfuscator'));
 
     // Step 4: Create wrapper function
@@ -290,8 +304,20 @@ function initObfuscateWorker() {
   if (_obfuscateWorker) return;
   const workerCode = `
     // Load Fengari in worker
-    importScripts('https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js');
-    
+    importScripts('lib/fengari-web.js');
+    // Strip only a leading Lua shebang (optional UTF-8 BOM / leading whitespace).
+    function stripLeadingLuaShebang(code) {
+      if (typeof code !== 'string' || !code) return code;
+      if (code.charCodeAt(0) === 0xFEFF) code = code.slice(1);
+      let i = 0;
+      while (i < code.length && (code[i] === ' ' || code[i] === '\t' || code[i] === '\r' || code[i] === '\n')) i++;
+      if (code.startsWith('#!', i)) {
+        const nl = code.indexOf('\n', i);
+        code = nl >= 0 ? code.slice(nl + 1) : '';
+      }
+      return code;
+    }
+
     let ready = false;
     let initError = null;
     
@@ -307,8 +333,7 @@ function initObfuscateWorker() {
         
         // Load vm_protect
         let vmCode = self._vmCode;
-        const vmShebangIdx = vmCode.indexOf('#!');
-        if (vmShebangIdx >= 0) vmCode = vmCode.substring(vmCode.indexOf('\n', vmShebangIdx) + 1);
+        vmCode = stripLeadingLuaShebang(vmCode);
         let status = lauxlib.luaL_loadbuffer(L, fengari.to_luastring(vmCode), vmCode.length, fengari.to_luastring('=vm_protect'));
         if (status !== lua.LUA_OK) throw new Error('vm_protect load: ' + lua.lua_tojsstring(L, -1));
         status = lua.lua_pcall(L, 0, 1, 0);
@@ -334,8 +359,7 @@ function initObfuscateWorker() {
         
         // Load obfuscator
         let obfCode = self._obfCode;
-        const shebangIdx = obfCode.indexOf('#!');
-        if (shebangIdx >= 0) obfCode = obfCode.substring(obfCode.indexOf('\n', shebangIdx) + 1);
+        obfCode = stripLeadingLuaShebang(obfCode);
         status = lauxlib.luaL_loadbuffer(L, fengari.to_luastring(obfCode), obfCode.length, fengari.to_luastring('=obfuscator'));
         if (status !== lua.LUA_OK) throw new Error('obfuscator load: ' + lua.lua_tojsstring(L, -1));
         status = lua.lua_pcall(L, 0, 1, 0);
@@ -7091,7 +7115,6 @@ return M
   end
 end
 
-﻿#!/usr/bin/env lua
 -- ================================================================
 -- obfuscator.lua
 -- Lua 代码混淆器 - 主程序

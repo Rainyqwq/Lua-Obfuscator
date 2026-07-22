@@ -17,9 +17,30 @@ local function read_file(path)
 end
 
 local function strip_shebang(code)
-  if code:sub(1, 2) == "#!" then
-    local nl = code:find("\n")
-    if nl then code = code:sub(nl + 1) end
+  -- Strip UTF-8 BOM then an optional leading shebang only.
+  if code:sub(1, 3) == "\239\187\191" then
+    code = code:sub(4)
+  elseif code:byte(1) == 0xFEFF then
+    code = code:sub(2)
+  end
+  local start = 1
+  while true do
+    local c = code:sub(start, start)
+    if c == " " or c == "\t" or c == "\r" or c == "\n" then
+      start = start + 1
+    else
+      break
+    end
+  end
+  if code:sub(start, start + 1) == "#!" then
+    local nl = code:find("\n", start, true)
+    if nl then
+      code = code:sub(nl + 1)
+    else
+      code = ""
+    end
+  elseif start > 1 then
+    code = code:sub(start)
   end
   return code
 end

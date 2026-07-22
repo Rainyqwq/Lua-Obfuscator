@@ -20,10 +20,15 @@ const htmlPath = path.join(__dirname, 'index.html');
 // --- Read bundle ---
 let bundle = fs.readFileSync(bundlePath, 'utf-8');
 
-// Strip shebang if present
-const shebangIdx = bundle.indexOf('#!');
-if (shebangIdx === 0) {
-  bundle = bundle.substring(bundle.indexOf('\n') + 1);
+// Strip leading BOM / shebang only (never mid-file: would drop package.preload)
+if (bundle.charCodeAt(0) === 0xFEFF) bundle = bundle.slice(1);
+{
+  let i = 0;
+  while (i < bundle.length && /[ \t\r\n]/.test(bundle[i])) i++;
+  if (bundle.startsWith('#!', i)) {
+    const nl = bundle.indexOf('\n', i);
+    bundle = nl >= 0 ? bundle.slice(nl + 1) : '';
+  }
 }
 
 // Escape backslashes for JS template literal: \ -> \\
