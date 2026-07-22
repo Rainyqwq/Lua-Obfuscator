@@ -77,7 +77,7 @@ local result, log = pm:run(code, {
   end,
 })
 
--- log: {{name, title, elapsed, input_size, output_size}, ...}
+-- log: &#123;&#123;name, title, elapsed, input_size, output_size&#125;, ...}
 ```
 
 ## 内置 Pass 列表
