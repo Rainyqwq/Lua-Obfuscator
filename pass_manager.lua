@@ -236,6 +236,7 @@ function PassManager:run(code, opts)
 
   -- 按顺序执行
   local idx = 0
+  local clock = os.clock  -- 缓存 os.clock，避免每次 pass 重复 nil 检查
   for _, entry in ipairs(self._pipeline) do
     if entry.enabled then
       local def = self._registry[entry.name]
@@ -246,7 +247,7 @@ function PassManager:run(code, opts)
       end
 
       local input_size = #code
-      local t0 = os.clock and os.clock() or 0
+      local t0 = clock and clock() or 0
 
       -- 合并配置
       ctx.config = {}
@@ -259,7 +260,7 @@ function PassManager:run(code, opts)
         error(string.format("Pass '%s' (%s) 执行失败: %s", def.name, def.title, tostring(result)))
       end
 
-      local elapsed = os.clock and (os.clock() - t0) or 0
+      local elapsed = clock and (clock() - t0) or 0
       code = result
 
       log[#log + 1] = {

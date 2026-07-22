@@ -239,6 +239,7 @@ function PassManager:run(code, opts)
 
   -- 按顺序执行
   local idx = 0
+  local clock = os.clock  -- 缓存 os.clock，避免每次 pass 重复 nil 检查
   for _, entry in ipairs(self._pipeline) do
     if entry.enabled then
       local def = self._registry[entry.name]
@@ -249,7 +250,7 @@ function PassManager:run(code, opts)
       end
 
       local input_size = #code
-      local t0 = os.clock and os.clock() or 0
+      local t0 = clock and clock() or 0
 
       -- 合并配置
       ctx.config = {}
@@ -262,7 +263,7 @@ function PassManager:run(code, opts)
         error(string.format("Pass '%s' (%s) 执行失败: %s", def.name, def.title, tostring(result)))
       end
 
-      local elapsed = os.clock and (os.clock() - t0) or 0
+      local elapsed = clock and (clock() - t0) or 0
       code = result
 
       log[#log + 1] = {
@@ -696,36 +697,25 @@ function M.restore(code)
     replacements[key] = encrypted
   end
 
-  -- 一次性替换所有占位符
-  -- 按 key 长度降序排序，避免短 key 匹配到长 key 的前缀
-  local keys = {}
-  for k in pairs(replacements) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return #a > #b end)
+  -- 一次 gsub 扫描所有占位符，函数回调返回加密表达式
+ code = code:gsub("__STR%d+__", function(key)
+   return replacements[key] or key
+ end)
 
-  for _, key in ipairs(keys) do
-    local safe_key = key:gsub("(%W)", "%%%1")
-    code = code:gsub(safe_key, replacements[key])
-  end
-
-  return code
+ return code
 end
 
 -- 将占位符替换为原始字符串（不加密）
 function M.restore_raw(code)
   if not next(M.pool) then return code end
 
-  local keys = {}
-  for k in pairs(M.pool) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return #a > #b end)
-
-  for _, key in ipairs(keys) do
+  -- 一次 gsub 扫描替换所有占位符
+  code = code:gsub("__STR%d+__", function(key)
     local info = M.pool[key]
-    local safe_key = key:gsub("(%W)", "%%%1")
+    if not info then return key end
     local quote = info.kind == "double" and '"' or "'"
-    -- 转义替换字符串中的 % 字符
-    local escaped = info.raw:gsub("%%", "%%%%")
-    code = code:gsub(safe_key, quote .. escaped .. quote)
-  end
+    return quote .. info.raw .. quote
+  end)
 
   return code
 end
@@ -3145,12 +3135,12 @@ local function collect_local_vars(code)
     end
   end
 
-  return var_map
+  return var_map, ids
 end
 
 function M.apply(code, _ctx)
   -- 收集需要替换的变量名
-  local var_map = collect_local_vars(code)
+  local var_map, ids = collect_local_vars(code)
 
   -- 生成替换名
   local rename_map = {}
@@ -3158,23 +3148,31 @@ function M.apply(code, _ctx)
     rename_map[name] = "_" .. random_id(6)
   end
 
-  -- 批量替换(从后往前处理,避免位置偏移)
-  local ids = scan_identifiers(code)
-  local replacements = {}
-  local rn = 0
+  -- 构建 segment 数组，一次 concat 完成替换
+  local segments = {}
+  local sn = 0
+  local last_pos = 1
 
   for _, id in ipairs(ids) do
     local new_name = rename_map[id.name]
     if new_name then
-      rn = rn + 1
-      replacements[rn] = { start = id.start, stop = id.stop, new_name = new_name }
+      if id.start > last_pos then
+        sn = sn + 1
+        segments[sn] = code:sub(last_pos, id.start - 1)
+      end
+      sn = sn + 1
+      segments[sn] = new_name
+      last_pos = id.stop + 1
     end
   end
+  -- 尾部
+  if last_pos <= #code then
+    sn = sn + 1
+    segments[sn] = code:sub(last_pos)
+  end
 
-  -- 从后往前替换
-  for i = rn, 1, -1 do
-    local r = replacements[i]
-    code = code:sub(1, r.start - 1) .. r.new_name .. code:sub(r.stop + 1)
+  if sn > 0 then
+    code = table.concat(segments)
   end
 
   return code

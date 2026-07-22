@@ -172,12 +172,12 @@ local function collect_local_vars(code)
     end
   end
 
-  return var_map
+  return var_map, ids
 end
 
 function M.apply(code, _ctx)
   -- 收集需要替换的变量名
-  local var_map = collect_local_vars(code)
+  local var_map, ids = collect_local_vars(code)
 
   -- 生成替换名
   local rename_map = {}
@@ -185,23 +185,31 @@ function M.apply(code, _ctx)
     rename_map[name] = "_" .. random_id(6)
   end
 
-  -- 批量替换(从后往前处理,避免位置偏移)
-  local ids = scan_identifiers(code)
-  local replacements = {}
-  local rn = 0
+  -- 构建 segment 数组，一次 concat 完成替换
+  local segments = {}
+  local sn = 0
+  local last_pos = 1
 
   for _, id in ipairs(ids) do
     local new_name = rename_map[id.name]
     if new_name then
-      rn = rn + 1
-      replacements[rn] = { start = id.start, stop = id.stop, new_name = new_name }
+      if id.start > last_pos then
+        sn = sn + 1
+        segments[sn] = code:sub(last_pos, id.start - 1)
+      end
+      sn = sn + 1
+      segments[sn] = new_name
+      last_pos = id.stop + 1
     end
   end
+  -- 尾部
+  if last_pos <= #code then
+    sn = sn + 1
+    segments[sn] = code:sub(last_pos)
+  end
 
-  -- 从后往前替换
-  for i = rn, 1, -1 do
-    local r = replacements[i]
-    code = code:sub(1, r.start - 1) .. r.new_name .. code:sub(r.stop + 1)
+  if sn > 0 then
+    code = table.concat(segments)
   end
 
   return code

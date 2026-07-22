@@ -52,7 +52,38 @@ button.danger:hover{background:var(--err);color:#fff}
 .stats span{white-space:nowrap}
 .resizer{width:4px;background:var(--border);cursor:col-resize;flex-shrink:0;transition:background .15s}
 .resizer:hover{background:var(--accent)}
-@media(max-width:768px){.main{flex-direction:column}.panel{border-right:none;border-bottom:1px solid var(--border)}.resizer{width:100%;height:4px;cursor:row-resize}}
+
+/* === Mobile / Tablet responsive === */
+@media(max-width:768px){
+  body{height:auto;min-height:100vh;overflow:auto;-webkit-overflow-scrolling:touch}
+  .main{flex-direction:column;overflow:visible}
+  .panel{border-right:none;border-bottom:1px solid var(--border);flex:none}
+  .panel#panel-left{flex:none;height:40vh;min-height:200px}
+  .panel#panel-right{flex:1;min-height:50vh}
+  .resizer{width:100%;height:4px;cursor:row-resize;display:none}
+  .editor{flex:1;min-height:0}
+  .output-area{min-height:120px}
+  header{flex-wrap:wrap;gap:8px;padding:6px 12px}
+  header h1{font-size:14px}
+  header .tag{font-size:10px}
+  header span:last-of-type{display:none}
+  .controls{padding:8px}
+  .controls-row label{font-size:10px;padding:3px 6px}
+  .btn-row{padding:6px 8px}
+  button{font-size:10px;padding:4px 8px}
+  .stats{flex-wrap:wrap;gap:8px;padding:4px 8px}
+  .footer{padding:6px 10px;font-size:10px}
+}
+@media(max-width:480px){
+  .panel#panel-left{height:35vh;min-height:160px}
+  header h1{font-size:13px}
+  .controls-row{gap:4px}
+  .controls-row label{font-size:9px;padding:2px 5px}
+  .btn-row{gap:4px;padding:4px 6px}
+  button{font-size:9px;padding:3px 6px}
+  textarea{font-size:12px;padding:8px}
+  .output-area{font-size:12px;padding:8px}
+}
 
 /* Batch mode */
 .drop-zone{margin:12px;padding:32px;border:2px dashed var(--border);border-radius:8px;text-align:center;color:var(--fg2);cursor:pointer;transition:all .2s;flex-shrink:0}
@@ -2888,6 +2919,7 @@ function PassManager:run(code, opts)
 
   -- 按顺序执行
   local idx = 0
+  local clock = os.clock  -- 缓存 os.clock，避免每次 pass 重复 nil 检查
   for _, entry in ipairs(self._pipeline) do
     if entry.enabled then
       local def = self._registry[entry.name]
@@ -2898,7 +2930,7 @@ function PassManager:run(code, opts)
       end
 
       local input_size = #code
-      local t0 = os.clock and os.clock() or 0
+      local t0 = clock and clock() or 0
 
       -- 合并配置
       ctx.config = {}
@@ -2911,7 +2943,7 @@ function PassManager:run(code, opts)
         error(string.format("Pass '%s' (%s) 执行失败: %s", def.name, def.title, tostring(result)))
       end
 
-      local elapsed = os.clock and (os.clock() - t0) or 0
+      local elapsed = clock and (clock() - t0) or 0
       code = result
 
       log[#log + 1] = {
@@ -3345,36 +3377,25 @@ function M.restore(code)
     replacements[key] = encrypted
   end
 
-  -- 一次性替换所有占位符
-  -- 按 key 长度降序排序，避免短 key 匹配到长 key 的前缀
-  local keys = {}
-  for k in pairs(replacements) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return #a > #b end)
+  -- 一次 gsub 扫描所有占位符，函数回调返回加密表达式
+ code = code:gsub("__STR%d+__", function(key)
+   return replacements[key] or key
+ end)
 
-  for _, key in ipairs(keys) do
-    local safe_key = key:gsub("(%W)", "%%%1")
-    code = code:gsub(safe_key, replacements[key])
-  end
-
-  return code
+ return code
 end
 
 -- 将占位符替换为原始字符串（不加密）
 function M.restore_raw(code)
   if not next(M.pool) then return code end
 
-  local keys = {}
-  for k in pairs(M.pool) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return #a > #b end)
-
-  for _, key in ipairs(keys) do
+  -- 一次 gsub 扫描替换所有占位符
+  code = code:gsub("__STR%d+__", function(key)
     local info = M.pool[key]
-    local safe_key = key:gsub("(%W)", "%%%1")
+    if not info then return key end
     local quote = info.kind == "double" and '"' or "'"
-    -- 转义替换字符串中的 % 字符
-    local escaped = info.raw:gsub("%%", "%%%%")
-    code = code:gsub(safe_key, quote .. escaped .. quote)
-  end
+    return quote .. info.raw .. quote
+  end)
 
   return code
 end
@@ -5794,12 +5815,12 @@ local function collect_local_vars(code)
     end
   end
 
-  return var_map
+  return var_map, ids
 end
 
 function M.apply(code, _ctx)
   -- 收集需要替换的变量名
-  local var_map = collect_local_vars(code)
+  local var_map, ids = collect_local_vars(code)
 
   -- 生成替换名
   local rename_map = {}
@@ -5807,23 +5828,31 @@ function M.apply(code, _ctx)
     rename_map[name] = "_" .. random_id(6)
   end
 
-  -- 批量替换(从后往前处理,避免位置偏移)
-  local ids = scan_identifiers(code)
-  local replacements = {}
-  local rn = 0
+  -- 构建 segment 数组，一次 concat 完成替换
+  local segments = {}
+  local sn = 0
+  local last_pos = 1
 
   for _, id in ipairs(ids) do
     local new_name = rename_map[id.name]
     if new_name then
-      rn = rn + 1
-      replacements[rn] = { start = id.start, stop = id.stop, new_name = new_name }
+      if id.start > last_pos then
+        sn = sn + 1
+        segments[sn] = code:sub(last_pos, id.start - 1)
+      end
+      sn = sn + 1
+      segments[sn] = new_name
+      last_pos = id.stop + 1
     end
   end
+  -- 尾部
+  if last_pos <= #code then
+    sn = sn + 1
+    segments[sn] = code:sub(last_pos)
+  end
 
-  -- 从后往前替换
-  for i = rn, 1, -1 do
-    local r = replacements[i]
-    code = code:sub(1, r.start - 1) .. r.new_name .. code:sub(r.stop + 1)
+  if sn > 0 then
+    code = table.concat(segments)
   end
 
   return code
@@ -7573,7 +7602,7 @@ const FEATURES = [
   { id: 'num_encrypt',  name: '数字加密',    desc: 'NumEnc',    default: true },
   { id: 'str_encrypt',  name: '字符串加密',  desc: 'StrEnc',    default: true },
   { id: 'cf_flatten',   name: '控制流平坦化', desc: 'CFE',       default: true },
-  { id: 'bb_split',      name: '基本块拆分',   desc: 'BBSplit',   default: false },
+  { id: 'bb_split',      name: '基本块拆分',   desc: 'BBSplit',   default: true },
   { id: 'bcf',          name: 'BCF虚假块',   desc: 'BCF',       default: true },
   { id: 'instr_sub',    name: '指令替换',    desc: 'InstrSub',  default: true },
   { id: 'adv_fake',     name: '虚假控制流',  desc: 'AdvFake',   default: true },
@@ -7941,8 +7970,10 @@ function loadExample(name) {
   let dragging = false;
 
   resizer.addEventListener('mousedown', e => { dragging = true; e.preventDefault(); });
+  function isMobile(){return window.matchMedia('(max-width:768px)').matches}
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
+    if (isMobile()) return;
     const container = document.querySelector('.main');
     const rect = container.getBoundingClientRect();
     const pct = ((e.clientX - rect.left) / rect.width) * 100;
@@ -7952,6 +7983,8 @@ function loadExample(name) {
     }
   });
   document.addEventListener('mouseup', () => dragging = false);
+  // Reset inline flex on orientation/resize back to desktop
+  window.addEventListener('resize', () => { if (!isMobile()) { left.style.flex=''; right.style.flex=''; } });
 })();
 
 // ============================================================

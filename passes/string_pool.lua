@@ -199,36 +199,25 @@ function M.restore(code)
     replacements[key] = encrypted
   end
 
-  -- 一次性替换所有占位符
-  -- 按 key 长度降序排序，避免短 key 匹配到长 key 的前缀
-  local keys = {}
-  for k in pairs(replacements) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return #a > #b end)
+  -- 一次 gsub 扫描所有占位符，函数回调返回加密表达式
+ code = code:gsub("__STR%d+__", function(key)
+   return replacements[key] or key
+ end)
 
-  for _, key in ipairs(keys) do
-    local safe_key = key:gsub("(%W)", "%%%1")
-    code = code:gsub(safe_key, replacements[key])
-  end
-
-  return code
+ return code
 end
 
 -- 将占位符替换为原始字符串（不加密）
 function M.restore_raw(code)
   if not next(M.pool) then return code end
 
-  local keys = {}
-  for k in pairs(M.pool) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return #a > #b end)
-
-  for _, key in ipairs(keys) do
+  -- 一次 gsub 扫描替换所有占位符
+  code = code:gsub("__STR%d+__", function(key)
     local info = M.pool[key]
-    local safe_key = key:gsub("(%W)", "%%%1")
+    if not info then return key end
     local quote = info.kind == "double" and '"' or "'"
-    -- 转义替换字符串中的 % 字符
-    local escaped = info.raw:gsub("%%", "%%%%")
-    code = code:gsub(safe_key, quote .. escaped .. quote)
-  end
+    return quote .. info.raw .. quote
+  end)
 
   return code
 end
