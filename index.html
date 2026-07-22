@@ -3003,7 +3003,7 @@ function M.load_all(pm)
     if ok and type(pass) == "table" and pass.name then
       pm:register(pass)
     else
-      io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\\n", name, tostring(pass)))
+      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
     end
   end
   return pm
@@ -7047,7 +7047,7 @@ function M.load_all(pm)
     if ok and type(pass) == "table" and pass.name then
       pm:register(pass)
     else
-      io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\\n", name, tostring(pass)))
+      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
     end
   end
   return pm
@@ -7094,7 +7094,7 @@ if _VERSION then
       rawset(_G, "_shl",  bit_lib.lshift)
       rawset(_G, "_shr",  bit_lib.rshift)
     else
-      io.stderr:write('[Lua Obfuscator] WARNING: ' .. _VERSION .. ' detected. Bitwise operators (~, &, |) require Lua 5.3+ or LuaJIT with bit library.\\n')
+      if io and io.stderr then io.stderr:write('[Lua Obfuscator] WARNING: ' .. _VERSION .. ' detected. Bitwise operators (~, &, |) require Lua 5.3+ or LuaJIT with bit library.\\n') else print('[Lua Obfuscator] WARNING: ' .. _VERSION .. ' detected. Bitwise operators (~, &, |) require Lua 5.3+ or LuaJIT with bit library.') end
     end
   end
 end

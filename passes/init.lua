@@ -38,7 +38,7 @@ function M.load_all(pm)
     if ok and type(pass) == "table" and pass.name then
       pm:register(pass)
     else
-      io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\n", name, tostring(pass)))
+      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
     end
   end
   return pm
