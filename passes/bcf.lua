@@ -29,7 +29,7 @@ M.name    = "bogus_control_flow"
 M.title   = "BCF虚假控制流"
 M.version = "1.0.0"
 M.order   = 80
-M.enabled = false  -- 已禁用：注入的假代码破坏局部变量作用域，导致函数返回错误值
+M.enabled = false  -- 默认禁用，由 Config 控制；修复了 then/else 分支交换 bug
 
 -- 生成不透明谓词（永远为真的条件表达式）
 local function generate_opaque_predicate()
@@ -87,10 +87,10 @@ function M.apply(code, _ctx)
        not trimmed:match("^elseif") and
        not trimmed:match("^then%s*$") and
        not trimmed:match("^do%s*$") and
-       not trimmed:match("^local%s+function") and
-       not trimmed:match("^function") and
-       not trimmed:match("^local%s+[%a_][%w_]*%s*=") and
-       not trimmed:match("^return%s") and
+      not trimmed:match("^local%s+function") and
+      not trimmed:match("^function") and
+       not trimmed:match("^local%s") and
+      not trimmed:match("^return%s") and
        not trimmed:match("^return$") and
        not trimmed:match("^break%s*$") and
        -- 跳过控制流语句（if/for/while/repeat 开头或以 then/do 结尾）
@@ -102,13 +102,13 @@ function M.apply(code, _ctx)
        not trimmed:match("do%s*$") and
        random_int(1, 4) == 1 then
 
-      local predicate = generate_opaque_predicate()
-      local fake_code = generate_bcf_code()
-      result[#result + 1] = string.format("%sif %s then", indent, predicate)
-      result[#result + 1] = string.format("    %s", fake_code)
+     local predicate = generate_opaque_predicate()
+     local fake_code = generate_bcf_code()
+     result[#result + 1] = string.format("%sif %s then", indent, predicate)
+     result[#result + 1] = string.format("    %s", trimmed)
       result[#result + 1] = string.format("%selse", indent)
-      result[#result + 1] = string.format("    %s", trimmed)
-      result[#result + 1] = string.format("%send", indent)
+      result[#result + 1] = string.format("    %s", fake_code)
+     result[#result + 1] = string.format("%send", indent)
     else
       result[#result + 1] = line
     end
