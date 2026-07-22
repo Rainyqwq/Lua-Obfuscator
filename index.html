@@ -2647,8 +2647,7 @@ M._OPC = OPC
 return M
 
 `;
-const OBFUSCATOR_LUA = `
--- Auto-generated bundle: all pass modules inlined
+const OBFUSCATOR_LUA = `-- Auto-generated bundle: all pass modules inlined
 do
   package.preload["pass_manager"] = function()
     return load([[-- ================================================================
@@ -2989,10 +2988,10 @@ local BUILTIN = {
   "passes.instr_sub",
   "passes.var_mangle",
   "passes.adv_fake_cf",
-  "passes.cf_flatten",
-  "passes.bcf",
+ "passes.cf_flatten",
+ "passes.bcf",
   "passes.bb_split",
-  "passes.junk_comment",
+ "passes.junk_comment",
   "passes.header",
 }
 
@@ -6230,7 +6229,7 @@ function M.apply(code, _ctx)
     -- 在函数开始和条件分支后注入虚假代码
     -- 不在 if/then 行后注入（避免破坏 elseif 链）
     local trimmed = line:match("^%s*(.-)%s*$") or ""
-    if o > 0 and depth > 0 and random_int(1, 3) == 1 and
+   if o > 0 and depth > 0 and random_int(1, 3) == 1 and
       not trimmed:match("then%s*$") and
       not trimmed:match("do%s*$") and
       not trimmed:match("^if%s") and
@@ -6645,13 +6644,13 @@ local function gen_dead_block(indent)
   local ops = { "+", "-", "*" }
   local op = ops[random_int(1, #ops)]
   local m = random_int(0, 0xFF)
-  return string.format("%sdo\n%s  local %s = %d\n%s  %s = %s %s %d\n%send",
+  return string.format("%sdo\\n%s  local %s = %d\\n%s  %s = %s %s %d\\n%send",
     indent, indent, v, n, indent, v, v, op, m, indent)
 end
 
 -- 检查块中是否包含 local 声明
 local function has_locals(block_text)
-  for line in block_text:gmatch("[^\n]+") do
+  for line in block_text:gmatch("[^\\n]+") do
     local trimmed = line:match("^%s*(.-)%s*$") or ""
     if trimmed:match("^local%s") then return true end
   end
@@ -6771,13 +6770,13 @@ function M.apply(code, _ctx)
           end
         end
         if should_split then
-          blocks[#blocks + 1] = table.concat(current_block, "\n")
+          blocks[#blocks + 1] = table.concat(current_block, "\\n")
           current_block = {}
         end
       end
     end
     if #current_block > 0 then
-      blocks[#blocks + 1] = table.concat(current_block, "\n")
+      blocks[#blocks + 1] = table.concat(current_block, "\\n")
     end
 
     if #blocks < 2 then goto continue end
@@ -7033,10 +7032,10 @@ local BUILTIN = {
   "passes.instr_sub",
   "passes.var_mangle",
   "passes.adv_fake_cf",
-  "passes.cf_flatten",
-  "passes.bcf",
+ "passes.cf_flatten",
+ "passes.bcf",
   "passes.bb_split",
-  "passes.junk_comment",
+ "passes.junk_comment",
   "passes.header",
 }
 
@@ -7138,9 +7137,9 @@ local Config = {
   constant_encryption       = true,
   advanced_fake_cf          = true,
   control_flow_flattening   = false,
-  basic_block_splitting      = false,
-  bogus_control_flow        = false,
-  junk_comments             = true,
+ bogus_control_flow        = false,
+  basic_block_splitting    = false,
+ junk_comments             = true,
 }
 
 -- Config key → Pass name 映射
@@ -7152,9 +7151,9 @@ local CONFIG_TO_PASS = {
   constant_encryption       = "constant_encryption",
   advanced_fake_cf          = "advanced_fake_cf",
   control_flow_flattening   = "control_flow_flattening",
-  basic_block_splitting      = "basic_block_splitting",
-  bogus_control_flow        = "bogus_control_flow",
-  junk_comments             = "junk_comments",
+ bogus_control_flow        = "bogus_control_flow",
+  basic_block_splitting    = "basic_block_splitting",
+ junk_comments             = "junk_comments",
 }
 
 -- 将 Config 同步到 PassManager
@@ -7179,9 +7178,9 @@ local function obfuscate(code, vm_module)
   if do_vm then
     pm:set_enabled("instruction_substitution", false)
     pm:set_enabled("control_flow_flattening", false)
-    pm:set_enabled("bogus_control_flow", false)
+   pm:set_enabled("bogus_control_flow", false)
     pm:set_enabled("basic_block_splitting", false)
-  end
+ end
 
   -- 字符串提取（VM保护时跳过，VM自己处理字符串）
   if not do_vm then
@@ -7217,14 +7216,14 @@ end
 local feature_names = {
   { key = "control_flow_flattening",  name = "控制流平坦化" },
   { key = "constant_encryption",      name = "常量数字加密" },
-  { key = "basic_block_splitting",     name = "基本块拆分" },
   { key = "bogus_control_flow",       name = "BCF虚假控制流" },
   { key = "variable_mangling",        name = "变量名混淆" },
   { key = "string_encryption",        name = "字符串加密" },
   { key = "junk_comments",            name = "垃圾注释" },
   { key = "instruction_substitution", name = "指令替换" },
-  { key = "advanced_fake_cf",         name = "虚假控制流增强" },
-  { key = "vm_protect",               name = "VM字节码虚拟化" },
+ { key = "advanced_fake_cf",         name = "虚假控制流增强" },
+  { key = "basic_block_splitting",   name = "基本块拆分" },
+ { key = "vm_protect",               name = "VM字节码虚拟化" },
 }
 
 local function print_banner()
@@ -7359,13 +7358,13 @@ Lua Obfuscator v%s - 使用说明
   --no-cfe              禁用控制流平坦化
   --no-num              禁用常量数字加密
   --no-bcf              禁用 BCF 虚假控制流
-  --no-bbsplit          禁用基本块拆分
   --no-var              禁用变量名混淆
   --no-str              禁用字符串加密
   --no-junk             禁用垃圾注释
   --no-instr            禁用指令替换
-  --no-advbcf           禁用虚假控制流增强
-  --demo                运行演示
+ --no-advbcf           禁用虚假控制流增强
+  --no-bbsplit         禁用基本块拆分
+ --demo                运行演示
   -h, --help            显示帮助
 
 交互模式:
@@ -7541,13 +7540,13 @@ if _is_cli then
     elseif a == "--no-cfe" then Config.control_flow_flattening = false
     elseif a == "--no-num" then Config.constant_encryption = false
     elseif a == "--no-bcf" then Config.bogus_control_flow = false
-    elseif a == "--no-bbsplit" then Config.basic_block_splitting = false
     elseif a == "--no-var" then Config.variable_mangling = false
     elseif a == "--no-str" then Config.string_encryption = false
     elseif a == "--no-junk" then Config.junk_comments = false
     elseif a == "--no-instr" then Config.instruction_substitution = false
-    elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
-    elseif a == "--vm" then Config.vm_protect = true
+   elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
+    elseif a == "--no-bbsplit" then Config.basic_block_splitting = false
+   elseif a == "--vm" then Config.vm_protect = true
     elseif a == "--demo" then
       local code = run_demo()
       local ok, result = pcall(obfuscate, code)
@@ -7568,7 +7567,6 @@ if _is_cli then
 end
 
 return M
-
 `;
 const FEATURES = [
   { id: 'var_mangle',   name: '变量名混淆',  desc: 'VarMangle', default: true },
