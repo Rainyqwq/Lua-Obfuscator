@@ -4411,6 +4411,7 @@ return M
   end
 end
 
+﻿#!/usr/bin/env lua
 -- ================================================================
 -- obfuscator.lua
 -- Lua 代码混淆器 - 主程序
@@ -4487,7 +4488,7 @@ local Config = {
   advanced_fake_cf          = true,
   control_flow_flattening   = false,
  bogus_control_flow        = false,
-  basic_block_splitting    = false,
+  basic_block_splitting    = true,
  junk_comments             = true,
 }
 
