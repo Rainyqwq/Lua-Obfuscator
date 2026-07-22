@@ -47,6 +47,20 @@ VM + 默认配置混淆 test_85（Bundle）：20/20 通过
 
 虚假控制流增强 Pass 不再在 `return` 语句后注入代码块，修复 Lua 语法错误。
 
+## v2.5.2 新增功能验证
+
+### 基本块拆分 Pass（bb_split）
+
+新增 `basic_block_splitting` Pass（order 90），将函数体拆分为基本块并用 goto/label 连接，增加 CFG 复杂度。
+
+**关键修复**：`return` 语句包裹为 `do return ... end`，避免 Lua 编译错误（`return` 后不能跟 `label`）。
+
+```
+test_bbsplit.lua 单元测试：编译通过 ✅ | 执行通过 ✅
+test_full.lua 完整测试：119/119 通过 ✅
+单 Pass 50 轮稳定性测试：50/50 通过 ✅
+```
+
 ## 单 Pass 稳定性测试
 
 对 fib+sort 代码进行 50 轮混淆验证：
@@ -58,6 +72,7 @@ VM + 默认配置混淆 test_85（Bundle）：20/20 通过
 | constant_encryption | 50/50 ✅ |
 | advanced_fake_cf | 50/50 ✅ |
 | junk_comments | 50/50 ✅ |
+| basic_block_splitting | 50/50 ✅ |
 
 ## 全面特性测试
 
@@ -88,6 +103,7 @@ VM + 默认配置混淆 test_85（Bundle）：20/20 通过
 | instruction_substitution | 等价替换改变语义 | 复杂表达式中的算术运算 |
 | control_flow_flattening | elseif 链嵌套错误 | 长 elseif 链 + 深嵌套 |
 | bogus_control_flow | 破坏控制流结构 | if/for/while 行后注入 |
+| basic_block_splitting | goto/label 跳转破坏局部变量作用域 | 含 local 声明的函数体 |
 
 以上 Pass 默认关闭，需手动开启。VM 模式下会被自动禁用。
 

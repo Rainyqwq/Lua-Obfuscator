@@ -17,7 +17,8 @@ Lua 代码混淆工具，支持多种混淆技术和 VM 字节码虚拟化保护
 | 控制流平坦化 | switch-case 调度器重组执行流 | ❌ 关闭 |
 | BCF 虚假控制流 | 不透明谓词虚假分支 | ❌ 关闭 |
 | VM 字节码虚拟化 | 源码编译为自定义字节码 | ❌ 关闭 |
-
+| 基本块拆分 | 函数体拆分为基本块并用 goto/label 连接 | ❌ 关闭 |
+ 
 标注 ❌ 的 Pass 存在已知稳定性问题，默认关闭，可手动开启（VM 模式下会被自动禁用）。
 标注 ⚠️ 的 Pass 默认开启且在多数场景下稳定，但存在边缘案例（见下方已知问题）。
 
@@ -30,6 +31,7 @@ Lua 代码混淆工具，支持多种混淆技术和 VM 字节码虚拟化保护
 | 指令替换 | 等价替换改变语义 | 复杂表达式中的算术运算 | 不稳定 |
 | 控制流平坦化 | elseif 链嵌套错误 | 长 elseif 链 + 深嵌套 | 不稳定 |
 | BCF 虚假控制流 | 破坏控制流结构 | if/for/while 行后注入 | 不稳定 |
+| 基本块拆分 | goto/label 跳转可能破坏局部变量作用域 | 含 local 声明的函数体 | 不稳定 |
 
 ## 项目结构
 
@@ -53,12 +55,14 @@ lua-obfuscator/
 │   ├── adv_fake_cf.lua     # 虚假控制流增强 Pass
 │   ├── cf_flatten.lua      # 控制流平坦化 Pass（不稳定）
 │   ├── bcf.lua             # BCF 虚假控制流 Pass（不稳定）
+│   ├── bb_split.lua       # 基本块拆分 Pass（不稳定）
 │   ├── junk_comment.lua    # 垃圾注释注入 Pass
 │   └── header.lua          # 代码头部 Pass
 ├── tests/                  # 测试文件
 │   ├── test_85.lua         # 85 项核心测试
 │   ├── test_full.lua       # 119 项完整测试
 │   ├── test_closure.lua    # 闭包专项测试
+│   ├── test_bbsplit.lua    # 基本块拆分测试
 │   └── test_comprehensive.lua  # 全面特性测试
 ├── examples/               # 示例输出
 ├── PASS_API.md             # Pass 接口文档
@@ -133,5 +137,6 @@ MIT License · Author: Rainy_qwq
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | 2.5.1 | 2025-07-22 | 修复 CLI 默认配置（三个不稳定 Pass 改为关闭）；VM 模式自动禁用不兼容 Pass；adv_fake_cf 修复 return 语句后注入 bug |
+| 2.5.2 | 2025-07-22 | 新增基本块拆分 Pass（bb_split）；修复 return 语句编译错误；Web 端同步更新 |
 | 2.5.0 | 2025-07-22 | Pass 架构重构，字符串池保护，Web Worker |
 | 2.4.0 | - | 原始版本 |

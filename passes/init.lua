@@ -24,9 +24,10 @@ local BUILTIN = {
   "passes.instr_sub",
   "passes.var_mangle",
   "passes.adv_fake_cf",
-  "passes.cf_flatten",
-  "passes.bcf",
-  "passes.junk_comment",
+ "passes.cf_flatten",
+ "passes.bcf",
+  "passes.bb_split",
+ "passes.junk_comment",
   "passes.header",
 }
 

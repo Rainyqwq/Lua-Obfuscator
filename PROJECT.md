@@ -16,6 +16,7 @@ Pass Pipeline (按 order 排序)
   ├─ variable_mangling (30) - 变量名替换
   ├─ constant_encryption (50) - 数字加密
   ├─ advanced_fake_cf (65)  - 虚假分支注入
+  ├─ basic_block_splitting (90) - 基本块拆分
   ├─ junk_comments (100)    - 垃圾注释
   └─ header (200)           - 代码头部
   ↓
@@ -95,6 +96,7 @@ return M
 | instruction_substitution | 等价替换在复杂表达式中改变语义 | 默认关闭 |
 | control_flow_flattening | elseif 链偶发嵌套错误 | 默认关闭 |
 | bogus_control_flow | 注入破坏多行语句和嵌套结构 | 默认关闭 |
+| basic_block_splitting | goto/label 跳转可能破坏局部变量作用域 | 默认关闭 |
 
 ### VM 模式自动禁用
 
@@ -120,6 +122,7 @@ return M
 | test_full.lua | 119 | 完整功能覆盖 |
 | test_closure.lua | - | 闭包专项 |
 | test_comprehensive.lua | 42 | 全 Lua 特性覆盖（4/42 通过） |
+| test_bbsplit.lua | - | 基本块拆分专项 |
 
 ```bash
 lua tests/test_85.lua    # 快速验证
@@ -131,5 +134,6 @@ lua tests/test_full.lua  # 完整测试
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | 2.5.1 | 2025-07-22 | 修复 CLI 默认配置；VM 模式自动禁用不兼容 Pass；adv_fake_cf 修复 return 语句注入 |
+| 2.5.2 | 2025-07-22 | 新增基本块拆分 Pass（bb_split）；修复 return 语句编译错误；Web 端同步更新 |
 | 2.5.0 | 2025-07-22 | Pass 架构重构，字符串池保护，Web Worker |
 | 2.4.0 | - | 原始版本 |

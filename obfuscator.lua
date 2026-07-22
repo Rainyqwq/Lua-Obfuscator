@@ -74,8 +74,9 @@ local Config = {
   constant_encryption       = true,
   advanced_fake_cf          = true,
   control_flow_flattening   = false,
-  bogus_control_flow        = false,
-  junk_comments             = true,
+ bogus_control_flow        = false,
+  basic_block_splitting    = false,
+ junk_comments             = true,
 }
 
 -- Config key → Pass name 映射
@@ -87,8 +88,9 @@ local CONFIG_TO_PASS = {
   constant_encryption       = "constant_encryption",
   advanced_fake_cf          = "advanced_fake_cf",
   control_flow_flattening   = "control_flow_flattening",
-  bogus_control_flow        = "bogus_control_flow",
-  junk_comments             = "junk_comments",
+ bogus_control_flow        = "bogus_control_flow",
+  basic_block_splitting    = "basic_block_splitting",
+ junk_comments             = "junk_comments",
 }
 
 -- 将 Config 同步到 PassManager
@@ -113,8 +115,9 @@ local function obfuscate(code, vm_module)
   if do_vm then
     pm:set_enabled("instruction_substitution", false)
     pm:set_enabled("control_flow_flattening", false)
-    pm:set_enabled("bogus_control_flow", false)
-  end
+   pm:set_enabled("bogus_control_flow", false)
+    pm:set_enabled("basic_block_splitting", false)
+ end
 
   -- 字符串提取（VM保护时跳过，VM自己处理字符串）
   if not do_vm then
@@ -155,8 +158,9 @@ local feature_names = {
   { key = "string_encryption",        name = "字符串加密" },
   { key = "junk_comments",            name = "垃圾注释" },
   { key = "instruction_substitution", name = "指令替换" },
-  { key = "advanced_fake_cf",         name = "虚假控制流增强" },
-  { key = "vm_protect",               name = "VM字节码虚拟化" },
+ { key = "advanced_fake_cf",         name = "虚假控制流增强" },
+  { key = "basic_block_splitting",   name = "基本块拆分" },
+ { key = "vm_protect",               name = "VM字节码虚拟化" },
 }
 
 local function print_banner()
@@ -295,8 +299,9 @@ Lua Obfuscator v%s - 使用说明
   --no-str              禁用字符串加密
   --no-junk             禁用垃圾注释
   --no-instr            禁用指令替换
-  --no-advbcf           禁用虚假控制流增强
-  --demo                运行演示
+ --no-advbcf           禁用虚假控制流增强
+  --no-bbsplit         禁用基本块拆分
+ --demo                运行演示
   -h, --help            显示帮助
 
 交互模式:
@@ -476,8 +481,9 @@ if _is_cli then
     elseif a == "--no-str" then Config.string_encryption = false
     elseif a == "--no-junk" then Config.junk_comments = false
     elseif a == "--no-instr" then Config.instruction_substitution = false
-    elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
-    elseif a == "--vm" then Config.vm_protect = true
+   elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
+    elseif a == "--no-bbsplit" then Config.basic_block_splitting = false
+   elseif a == "--vm" then Config.vm_protect = true
     elseif a == "--demo" then
       local code = run_demo()
       local ok, result = pcall(obfuscate, code)

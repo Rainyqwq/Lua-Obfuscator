@@ -58,6 +58,7 @@ const config = {
   instr_sub: false,               // 指令替换（不稳定）
   cf_flatten: false,              // 控制流平坦化（不稳定）
   bcf: false,                     // BCF 虚假控制流（不稳定）
+  bb_split: false,                // 基本块拆分（不稳定）
 };
 ```
 
@@ -74,6 +75,7 @@ const config = {
 | `instr_sub` | `instruction_substitution` |
 | `cf_flatten` | `control_flow_flattening` |
 | `bcf` | `bogus_control_flow` |
+| `bb_split` | `basic_block_splitting` |
 
 ## UI 控制
 

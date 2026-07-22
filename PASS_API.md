@@ -92,6 +92,7 @@ local result, log = pm:run(code, {
 | 65 | `advanced_fake_cf` | 虚假控制流增强 | ✅ | 注入不可达分支 |
 | 70 | `control_flow_flattening` | 控制流平坦化 | ❌ | 不稳定 |
 | 80 | `bogus_control_flow` | BCF 虚假控制流 | ❌ | 不稳定 |
+| 90 | `basic_block_splitting` | 基本块拆分 | ❌ | goto/label 拆分函数体，不稳定 |
 | 100 | `junk_comments` | 垃圾注释注入 | ✅ | 插入无意义注释 |
 | 200 | `header` | 代码头部 | ✅ | 版本标识 |
 
@@ -103,6 +104,7 @@ order  20: 字符串加密
 order  30: 变量名混淆
 order  50: 常量数字加密
 order  65: 虚假控制流增强
+order  90: 基本块拆分
 order 100: 垃圾注释注入
 order 200: 代码头部（最后）
 ```

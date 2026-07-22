@@ -53,8 +53,9 @@ local pass_files = {
   {"passes.instr_sub", "passes/instr_sub.lua"},
   {"passes.adv_fake_cf", "passes/adv_fake_cf.lua"},
   {"passes.cf_flatten", "passes/cf_flatten.lua"},
-  {"passes.bcf", "passes/bcf.lua"},
-  {"passes.junk_comment", "passes/junk_comment.lua"},
+ {"passes.bcf", "passes/bcf.lua"},
+  {"passes.bb_split", "passes/bb_split.lua"},
+ {"passes.junk_comment", "passes/junk_comment.lua"},
   {"passes.header", "passes/header.lua"},
   {"passes.init", "passes/init.lua"},
 }
