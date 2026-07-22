@@ -1,4 +1,4 @@
-# 项目详细文档
+﻿# 项目详细文档
 
 ## 架构
 
@@ -107,6 +107,14 @@ return M
 - `bogus_control_flow`（BCF 虚假控制流）- 虚假分支注入破坏 VM 控制流
 
 其余 Pass（字符串加密、变量名混淆、常量数字加密、虚假控制流增强、垃圾注释注入）与 VM 兼容，正常执行。
+
+### v2.6.0 修复内容
+
+1. **性能优化**：var_mangle 改为单次扫描 + table.concat（O(n) 替代 O(n*k)）；string_pool restore/restore_raw 改为单次 gsub（O(n) 替代 O(n*k)）；pass_manager 缓存 os.clock 引用
+2. **手机端响应式适配**：768px + 480px 双断点 CSS；移动端面板垂直堆叠；resizer 移动端跳过鼠标拖拽
+3. **bb_split 默认开启**：CLI 和 Web 端均默认启用基本块拆分 Pass
+4. **BCF then/else 分支交换修复**：真实代码放 then（恒真谓词，总执行），假代码放 else
+5. **bb_split JS 模板字面量转义修复**：build_html.js 将 bundle 反斜杠翻倍后注入 index.html
 
 ### v2.5.1 修复内容
 
