@@ -1,4 +1,4 @@
--- Auto-generated bundle: all pass modules inlined
+-- Auto-generated bundle
 do
   package.preload["pass_manager"] = function()
     return load([[-- ================================================================
@@ -3189,13 +3189,13 @@ local function scan_identifiers(code)
 end
 
 -- 从代码中提取 local 声明的变量名
-local function collect_local_vars(code)
+local function collect_local_vars(code, table_keys)
   local var_map = {}
   local ids = scan_identifiers(code)
 
   for i, id in ipairs(ids) do
     local name = id.name
-    if not RESERVED[name] and not name:match("^__") and not var_map[name] then
+    if not RESERVED[name] and not name:match("^__") and not var_map[name] and not table_keys[name] then
       -- 检查上下文:是否是 local 声明
       -- local xxx = / local function xxx / local xxx, yyy
       local before = code:sub(math.max(1, id.start - 20), id.start - 1)
@@ -3217,7 +3217,7 @@ local function collect_local_vars(code)
   -- 函数参数 function(x, y)
   for i, id in ipairs(ids) do
     local name = id.name
-    if not RESERVED[name] and not name:match("^__") and not var_map[name] then
+    if not RESERVED[name] and not name:match("^__") and not var_map[name] and not table_keys[name] then
       local before = code:sub(math.max(1, id.start - 5), id.start - 1)
       if before:match("%(%s*$") or before:match(",%s*$") then
         -- 往前找 function
@@ -3232,7 +3232,7 @@ local function collect_local_vars(code)
   -- for 循环变量 for i = / for k, v in
   for i, id in ipairs(ids) do
     local name = id.name
-    if not RESERVED[name] and not name:match("^__") and not var_map[name] then
+    if not RESERVED[name] and not name:match("^__") and not var_map[name] and not table_keys[name] then
       local before = code:sub(math.max(1, id.start - 10), id.start - 1)
       if before:match("for%s+$") or before:match(",%s*$") then
         var_map[name] = true
@@ -3243,9 +3243,77 @@ local function collect_local_vars(code)
   return var_map, ids
 end
 
+-- ????????????????????????
+local function collect_table_keys(code)
+  local keys = {}
+  local i = 1
+  local len = #code
+  while i <= len do
+    local b = code:byte(i)
+    -- ????????
+    if b == 34 or b == 39 then
+      local q = b; i = i + 1
+      while i <= len do
+        if code:byte(i) == 92 then i = i + 2
+        elseif code:byte(i) == q then i = i + 1; break
+        else i = i + 1 end
+      end
+    elseif b == 45 and i < len and code:byte(i+1) == 45 then
+      local nl = code:find("\n", i+2, true)
+      i = nl and (nl+1) or (len+1)
+    -- ??????
+    elseif b == 123 then
+      i = i + 1
+      local depth = 1
+      while i <= len and depth > 0 do
+        local cb = code:byte(i)
+        if cb == 123 then depth = depth + 1
+        elseif cb == 125 then depth = depth - 1
+        elseif cb == 34 or cb == 39 then
+          local q = cb; i = i + 1
+          while i <= len do
+            if code:byte(i) == 92 then i = i + 2
+            elseif code:byte(i) == q then i = i + 1; break
+            else i = i + 1 end
+          end
+        elseif cb == 91 then
+          i = i + 1
+          while i <= len and code:byte(i) ~= 93 do i = i + 1 end
+          i = i + 1
+          while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+          if code:byte(i) == 61 then
+            i = i + 1
+            while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+          end
+        elseif (cb >= 65 and cb <= 90) or (cb >= 97 and cb <= 122) or cb == 95 then
+          local start = i
+          i = i + 1
+          while i <= len do
+            local ib = code:byte(i)
+            if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
+          end
+          local key = code:sub(start, i - 1)
+          -- ?? = ?
+          while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+          if code:byte(i) == 61 then
+            keys[key] = true
+            i = i + 1
+          end
+        else
+          i = i + 1
+        end
+      end
+    else
+      i = i + 1
+    end
+  end
+  return keys
+end
+
 function M.apply(code, _ctx)
   -- 收集需要替换的变量名
-  local var_map, ids = collect_local_vars(code)
+  local table_keys = collect_table_keys(code)
+  local var_map, ids = collect_local_vars(code, table_keys)
 
   -- 生成替换名
   local rename_map = {}
@@ -3325,6 +3393,14 @@ local BYTE_UNDERSCORE = string.byte("_")
 -- 检查一个字节是否是数字
 local function is_digit(b)
   return b >= 48 and b <= 57  -- '0' to '9'
+end
+
+local function is_id_start(b)
+  return (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95
+end
+
+local function is_id_char(b)
+  return is_id_start(b) or is_digit(b)
 end
 
 -- 检查是否是十六进制字面量
@@ -3463,7 +3539,7 @@ function M.apply(code, _ctx)
           pos = hx_end
 
         -- 数字（包括科学计数法）
-        elseif is_digit(b) then
+        elseif is_digit(b) and not (pos > 1 and is_id_char(line:byte(pos - 1))) then
           local num_start = pos
           local num_end = pos
           local has_dot = false
@@ -4566,7 +4642,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.6.0"
+local VERSION = "2.7.0"
 
 -- ============================================================
 -- 加载 Pass 系统

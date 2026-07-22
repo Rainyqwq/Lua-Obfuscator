@@ -38,6 +38,14 @@ local function is_digit(b)
   return b >= 48 and b <= 57  -- '0' to '9'
 end
 
+local function is_id_start(b)
+  return (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95
+end
+
+local function is_id_char(b)
+  return is_id_start(b) or is_digit(b)
+end
+
 -- 检查是否是十六进制字面量
 local function is_hex(s, pos)
   if pos + 1 > #s then return false end
@@ -174,7 +182,7 @@ function M.apply(code, _ctx)
           pos = hx_end
 
         -- 数字（包括科学计数法）
-        elseif is_digit(b) then
+        elseif is_digit(b) and not (pos > 1 and is_id_char(line:byte(pos - 1))) then
           local num_start = pos
           local num_end = pos
           local has_dot = false
