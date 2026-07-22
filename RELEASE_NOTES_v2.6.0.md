@@ -1,4 +1,4 @@
-﻿# v2.6.0 Release Notes
+# v2.6.0 Release Notes
 
 ## 性能优化
 
