@@ -764,7 +764,7 @@ end
     才能还原原始逻辑
 ]]
 
-local VERSION = "2.1.0"
+local VERSION = "2.7.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -2367,151 +2367,252 @@ end
 ------------------------------------------------------------
 -- 字节码编码（混淆 + 加密）
 ------------------------------------------------------------
-local function encode_proto(proto, key)
+-- 字节码编码（op 池映射 + 字符池 + 整表加密）
+------------------------------------------------------------
+
+local OPC_NAMES = {
+  {"NOP", 0}, {"LOADK", 1}, {"LOADBOOL", 2}, {"LOADNIL", 3},
+  {"MOVE", 4}, {"GETGLOBAL", 5}, {"SETGLOBAL", 6},
+  {"GETTABLE", 7}, {"SETTABLE", 8}, {"NEWTABLE", 9},
+  {"ADD", 10}, {"SUB", 11}, {"MUL", 12}, {"DIV", 13}, {"MOD", 14}, {"POW", 15},
+  {"BAND", 16}, {"BOR", 17}, {"BXOR", 18}, {"SHL", 19}, {"SHR", 20},
+  {"UNM", 21}, {"BNOT", 22}, {"NOT", 23}, {"LEN", 24}, {"CONCAT", 25},
+  {"EQ", 26}, {"LT", 27}, {"LE", 28},
+  {"JMP", 29}, {"TEST", 30}, {"TESTSET", 31},
+  {"CALL", 32}, {"TAILCALL", 33}, {"RETURN", 34},
+  {"FORPREP", 35}, {"FORLOOP", 36},
+  {"TFORPREP", 37}, {"TFORCALL", 38}, {"TFORLOOP", 39},
+  {"SETLIST", 40}, {"CLOSURE", 41}, {"VARARG", 42},
+  {"EXTRARG", 43}, {"GETUPVAL", 44}, {"SETUPVAL", 45},
+  {"IDIV", 55},
+}
+
+local function shuffle_list(t)
+  for i = #t, 2, -1 do
+    local j = math.random(1, i)
+    t[i], t[j] = t[j], t[i]
+  end
+  return t
+end
+
+local function build_op_map()
+  local n = #OPC_NAMES
+  local runtime_ids = {}
+  for i = 1, n do runtime_ids[i] = i - 1 end
+  shuffle_list(runtime_ids)
+  local op_map = {}
+  local name_to_rt = {}
+  for i, entry in ipairs(OPC_NAMES) do
+    local name, logical = entry[1], entry[2]
+    local rt = runtime_ids[i]
+    op_map[logical] = rt
+    name_to_rt[name] = rt
+  end
+  return op_map, name_to_rt
+end
+
+local function build_char_pool(proto)
+  local seen = {}
+  local pool = {}
+
+  local function add_bytes(s)
+    if type(s) ~= "string" then return end
+    for i = 1, #s do
+      local b = string.byte(s, i)
+      if not seen[b] then
+        seen[b] = true
+        pool[#pool + 1] = b
+      end
+    end
+  end
+
+  local function walk(p)
+    for _, k in ipairs(p.constants or {}) do
+      if type(k) == "string" then
+        add_bytes(k)
+      elseif type(k) == "number" then
+        add_bytes(tostring(k))
+      elseif type(k) == "table" and k.code then
+        walk(k)
+      end
+    end
+    for _, uv in ipairs(p.upvalues or {}) do
+      add_bytes(uv.name or "")
+    end
+  end
+  walk(proto)
+
+  for _ = 1, math.random(4, 16) do
+    local b = math.random(0, 255)
+    if not seen[b] then
+      seen[b] = true
+      pool[#pool + 1] = b
+    end
+  end
+  if #pool == 0 then
+    pool[1] = 0
+  end
+  shuffle_list(pool)
+
+  local byte_to_idx = {}
+  for i, b in ipairs(pool) do
+    byte_to_idx[b] = i
+  end
+  local pool_key = math.random(1, 255)
+  local encrypted = {}
+  for i, b in ipairs(pool) do
+    encrypted[i] = b ~ pool_key
+  end
+  return encrypted, byte_to_idx, pool_key
+end
+
+local function encode_string_via_pool(s, byte_to_idx, parts)
+  parts[#parts + 1] = #s
+  for i = 1, #s do
+    local b = string.byte(s, i)
+    parts[#parts + 1] = byte_to_idx[b] or 1
+  end
+end
+
+local function encode_proto(proto, key, op_map, byte_to_idx)
   local parts = {}
-  
-  -- Header
   parts[#parts + 1] = proto.numparams
   parts[#parts + 1] = proto.maxstack
   parts[#parts + 1] = #proto.constants
   parts[#parts + 1] = #proto.code
-  
-  -- Constants
+
   for _, k in ipairs(proto.constants) do
     if type(k) == "number" then
-      parts[#parts + 1] = 1  -- type: number
-      -- Encode number as string to avoid precision issues
-      local s = tostring(k)
-      parts[#parts + 1] = #s
-      for i = 1, #s do parts[#parts + 1] = string.byte(s, i) end
+      parts[#parts + 1] = 1
+      encode_string_via_pool(tostring(k), byte_to_idx, parts)
     elseif type(k) == "string" then
-      parts[#parts + 1] = 2  -- type: string
-      parts[#parts + 1] = #k
-      for i = 1, #k do parts[#parts + 1] = string.byte(k, i) end
+      parts[#parts + 1] = 2
+      encode_string_via_pool(k, byte_to_idx, parts)
     elseif type(k) == "boolean" then
-      parts[#parts + 1] = 3  -- type: boolean
+      parts[#parts + 1] = 3
       parts[#parts + 1] = k and 1 or 0
     elseif type(k) == "table" then
-      -- Sub-prototype (for closures)
-      parts[#parts + 1] = 4  -- type: proto
-      local sub = encode_proto(k, key)
+      parts[#parts + 1] = 4
+      local sub = encode_proto(k, key, op_map, byte_to_idx)
       for _, v in ipairs(sub) do parts[#parts + 1] = v end
-      parts[#parts + 1] = 0  -- terminator
+      parts[#parts + 1] = 0
     end
   end
-  parts[#parts + 1] = 0  -- end of constants
-  
-  -- Code (instructions)
+  parts[#parts + 1] = 0
+
   for _, instr in ipairs(proto.code) do
-    -- Encode as 4 values: op, A, B, C/sBx
-    parts[#parts + 1] = instr.op
+    parts[#parts + 1] = op_map[instr.op] or instr.op
     parts[#parts + 1] = instr.a
     parts[#parts + 1] = instr.b
     parts[#parts + 1] = instr.c
   end
-  
-  -- Upvalue descriptors
+
   local uvs = proto.upvalues or {}
   parts[#parts + 1] = #uvs
   for _, uv in ipairs(uvs) do
     parts[#parts + 1] = uv.reg
-    local nm = uv.name or ""
-    parts[#parts + 1] = #nm
-    for i = 1, #nm do parts[#parts + 1] = string.byte(nm, i) end
-  end
-  
-  -- Ensure all values are non-negative (JMP offsets can be negative)
-  for i, v in ipairs(parts) do
-    if v < 0 then parts[i] = v & 0xFFFFFFFF end
+    encode_string_via_pool(uv.name or "", byte_to_idx, parts)
   end
 
+  for i, v in ipairs(parts) do
+    if type(v) == "number" and v < 0 then
+      parts[i] = v & 0xFFFFFFFF
+    end
+  end
   return parts
 end
 
-------------------------------------------------------------
--- VM 解释器生成（嵌入输出的 Lua 代码）
-------------------------------------------------------------
 local function generate_vm_source(proto, key)
-  local encoded = encode_proto(proto, key)
-  -- Anti-tamper: compute checksum on unencrypted data
+  local op_map, name_to_rt = build_op_map()
+  local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
+  local encoded = encode_proto(proto, key, op_map, byte_to_idx)
+
   local seed = math.random(1000, 9999)
   local cs = seed
   for i, v in ipairs(encoded) do cs = (cs + v * (i + seed)) % 65536 end
-  -- XOR encrypt the entire flat array once
   for i, v in ipairs(encoded) do
     encoded[i] = v ~ key
   end
   local data_str = table.concat(encoded, ",")
-  
-  return string.format([===[
--- VM Protected Code
+  local chars_str = table.concat(char_pool_enc, ",")
+
+  local names_order = {
+    "NOP","LOADK","LOADBOOL","LOADNIL","MOVE","GETGLOBAL","SETGLOBAL",
+    "GETUPVAL","SETUPVAL","GETTABLE","SETTABLE","NEWTABLE",
+    "ADD","SUB","MUL","DIV","IDIV","MOD","POW",
+    "BAND","BOR","BXOR","SHL","SHR",
+    "UNM","BNOT","NOT","LEN","CONCAT",
+    "EQ","LT","LE","JMP","TEST","TESTSET",
+    "CALL","TAILCALL","RETURN","FORPREP","FORLOOP",
+    "TFORPREP","TFORCALL","TFORLOOP","CLOSURE","VARARG","EXTRARG","SETLIST",
+  }
+  local op_locals = {}
+  for _, nm in ipairs(names_order) do
+    op_locals[#op_locals + 1] = string.format("  local OP_%s = %d", nm, name_to_rt[nm] or 0)
+  end
+  local op_locals_str = table.concat(op_locals, "\n")
+
+  -- Template uses %% for literal % in string.format
+  local tpl = [====[
+-- VM Protected Code (op-pool + char-pool)
 do
   local _d = {%s}
+  local _chars = {%s}
   local _k = %d
+  local _ck = %d
   local _cs_seed = %d
   local _cs_expect = %d
-  -- Decrypt
+
   for _i = 1, #_d do _d[_i] = _d[_i] ~ _k end
 
-  -- VM opcodes
-  local OP_NOP, OP_LOADK, OP_LOADBOOL, OP_LOADNIL = 0, 1, 2, 3
-  local OP_MOVE, OP_GETGLOBAL, OP_SETGLOBAL = 4, 5, 6
-  local OP_GETUPVAL, OP_SETUPVAL = 44, 45
-  local OP_GETTABLE, OP_SETTABLE, OP_NEWTABLE = 7, 8, 9
-  local OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_IDIV, OP_MOD, OP_POW = 10, 11, 12, 13, 55, 14, 15
-  local OP_BAND, OP_BOR, OP_BXOR, OP_SHL, OP_SHR = 16, 17, 18, 19, 20
-  local OP_UNM, OP_BNOT, OP_NOT, OP_LEN, OP_CONCAT = 21, 22, 23, 24, 25
-  local OP_EQ, OP_LT, OP_LE = 26, 27, 28
-  local OP_JMP, OP_TEST, OP_TESTSET = 29, 30, 31
-  local OP_CALL, OP_TAILCALL, OP_RETURN = 32, 33, 34
-  local OP_FORPREP, OP_FORLOOP = 35, 36
-  local OP_TFORPREP, OP_TFORCALL, OP_TFORLOOP = 37, 38, 39
-  local OP_CLOSURE, OP_VARARG = 41, 42
+  local function _dec_str(di, len)
+    local t = {}
+    for i = 1, len do
+      local idx = _d[di]; di = di + 1
+      t[i] = string.char((_chars[idx] or 0) ~ _ck)
+    end
+    return table.concat(t), di
+  end
 
-  -- Decode prototype from data (recursive for nested sub-protos)
-  local function decode_proto(di, depth)
-    depth = depth or 0
-    local indent = string.rep("  ", depth)
+%s
+
+  local function decode_proto(di)
     local np = _d[di]; di = di + 1
     local ms = _d[di]; di = di + 1
     local nk = _d[di]; di = di + 1
     local nc = _d[di]; di = di + 1
     local consts = {}
-    for ci = 1, nk do
+    for _ci = 1, nk do
       local t = _d[di]; di = di + 1
       if t == 0 then break end
-      if t == 1 then  -- number
+      if t == 1 then
         local sl = _d[di]; di = di + 1
-        local s = ""
-        for _ = 1, sl do s = s .. string.char(_d[di]); di = di + 1 end
+        local s; s, di = _dec_str(di, sl)
         consts[#consts + 1] = tonumber(s)
-      elseif t == 2 then  -- string
+      elseif t == 2 then
         local sl = _d[di]; di = di + 1
-        local s = ""
-        for _ = 1, sl do s = s .. string.char(_d[di]); di = di + 1 end
+        local s; s, di = _dec_str(di, sl)
         consts[#consts + 1] = s
-      elseif t == 3 then  -- boolean
+      elseif t == 3 then
         consts[#consts + 1] = _d[di] == 1; di = di + 1
-      elseif t == 4 then  -- sub-proto (recursive)
-        local sub, new_di = decode_proto(di, depth + 1)
+      elseif t == 4 then
+        local sub, new_di = decode_proto(di)
         consts[#consts + 1] = sub
-        di = new_di + 1  -- skip trailing terminator for sub-proto
+        di = new_di + 1
       end
     end
-    di = di + 1  -- skip end-of-constants marker (0)
+    di = di + 1
     local code = {}
     for _ = 1, nc do
       code[#code + 1] = { op = _d[di], a = _d[di+1], b = _d[di+2], c = _d[di+3] }
       di = di + 4
     end
-    -- Upvalue descriptors
     local nuv = _d[di]; di = di + 1
     local upvalues = {}
     for _ = 1, nuv do
       local uv_reg = _d[di]; di = di + 1
       local name_len = _d[di]; di = di + 1
-      local nm = ""
-      for _ = 1, name_len do nm = nm .. string.char(_d[di]); di = di + 1 end
+      local nm; nm, di = _dec_str(di, name_len)
       upvalues[#upvalues + 1] = { reg = uv_reg, name = nm }
     end
     return { code = code, constants = consts, numparams = np, maxstack = ms, upvalues = upvalues }, di
@@ -2519,9 +2620,7 @@ do
 
   local _orig_pack = _G._pack
 
-  -- VM execution
   local function exec_proto(proto, regs, base, nargs, upvals, varargs)
-    -- Register _pack as a global that captures current varargs
     _G._pack = function()
       local t = {}
       if varargs then for i = 1, #varargs do t[i] = varargs[i] end end
@@ -2530,292 +2629,302 @@ do
     local code = proto.code
     local consts = proto.constants
     local pc = 1
+    local A, B, C
+
+    local H = {}
+
+    H[OP_NOP] = function() end
+    H[OP_LOADK] = function()
+      regs[base + A] = consts[B]
+    end
+    H[OP_LOADBOOL] = function()
+      regs[base + A] = B ~= 0
+      if C ~= 0 then pc = pc + 1 end
+    end
+    H[OP_LOADNIL] = function()
+      for i = 0, B do regs[base + A + i] = nil end
+    end
+    H[OP_MOVE] = function()
+      regs[base + A] = regs[base + B]
+    end
+    H[OP_GETGLOBAL] = function()
+      regs[base + A] = _G[consts[B]]
+    end
+    H[OP_SETGLOBAL] = function()
+      _G[consts[B]] = regs[base + A]
+    end
+    H[OP_GETUPVAL] = function()
+      if upvals and upvals[B + 1] then
+        local uv = upvals[B + 1]
+        regs[base + A] = uv[1][uv[2]]
+      end
+    end
+    H[OP_SETUPVAL] = function()
+      if upvals and upvals[B + 1] then
+        local uv = upvals[B + 1]
+        uv[1][uv[2]] = regs[base + A]
+      end
+    end
+    H[OP_GETTABLE] = function()
+      local t = regs[base + B]
+      if type(t) == "table" then
+        regs[base + A] = t[regs[base + C]]
+      else
+        regs[base + A] = nil
+      end
+    end
+    H[OP_SETTABLE] = function()
+      local t = regs[base + A]
+      if type(t) == "table" then t[regs[base + B]] = regs[base + C] end
+    end
+    H[OP_NEWTABLE] = function()
+      regs[base + A] = {}
+    end
+    H[OP_ADD] = function()
+      local l, r = regs[base + B], regs[base + C]
+      regs[base + A] = (type(l) == "number" and type(r) == "number") and (l + r) or (tonumber(l) or 0) + (tonumber(r) or 0)
+    end
+    H[OP_SUB] = function()
+      regs[base + A] = regs[base + B] - regs[base + C]
+    end
+    H[OP_MUL] = function()
+      regs[base + A] = regs[base + B] * regs[base + C]
+    end
+    H[OP_DIV] = function()
+      regs[base + A] = regs[base + B] / regs[base + C]
+    end
+    H[OP_IDIV] = function()
+      regs[base + A] = regs[base + B] // regs[base + C]
+    end
+    H[OP_MOD] = function()
+      regs[base + A] = regs[base + B] %% regs[base + C]
+    end
+    H[OP_POW] = function()
+      regs[base + A] = regs[base + B] ^ regs[base + C]
+    end
+    H[OP_BAND] = function()
+      regs[base + A] = regs[base + B] & regs[base + C]
+    end
+    H[OP_BOR] = function()
+      regs[base + A] = regs[base + B] | regs[base + C]
+    end
+    H[OP_BXOR] = function()
+      regs[base + A] = regs[base + B] ~ regs[base + C]
+    end
+    H[OP_SHL] = function()
+      regs[base + A] = regs[base + B] << regs[base + C]
+    end
+    H[OP_SHR] = function()
+      regs[base + A] = regs[base + B] >> regs[base + C]
+    end
+    H[OP_UNM] = function()
+      regs[base + A] = -regs[base + B]
+    end
+    H[OP_BNOT] = function()
+      regs[base + A] = ~regs[base + B]
+    end
+    H[OP_NOT] = function()
+      regs[base + A] = not regs[base + B]
+    end
+    H[OP_LEN] = function()
+      regs[base + A] = #regs[base + B]
+    end
+    H[OP_CONCAT] = function()
+      local v = regs[base + B]
+      local s = type(v) == 'string' and v or tostring(v)
+      for j = B + 1, C do
+        v = regs[base + j]
+        s = s .. (type(v) == 'string' and v or tostring(v))
+      end
+      regs[base + A] = s
+    end
+    H[OP_EQ] = function()
+      local eq = (regs[base + B] == regs[base + C])
+      if (eq and A == 0) or (not eq and A == 1) then pc = pc + 1 end
+    end
+    H[OP_LT] = function()
+      local lt = (regs[base + B] < regs[base + C])
+      if (lt and A == 0) or (not lt and A == 1) then pc = pc + 1 end
+    end
+    H[OP_LE] = function()
+      local le = (regs[base + B] <= regs[base + C])
+      if (le and A == 0) or (not le and A == 1) then pc = pc + 1 end
+    end
+    H[OP_JMP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      pc = pc + sBx
+    end
+    H[OP_FORPREP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      regs[base + A] = regs[base + A] - regs[base + A + 2]
+      pc = pc + sBx
+    end
+    H[OP_FORLOOP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      regs[base + A] = regs[base + A] + regs[base + A + 2]
+      local step = regs[base + A + 2]
+      local limit = regs[base + A + 1]
+      local idx = regs[base + A]
+      local cont = (step > 0) and (idx <= limit) or (idx >= limit)
+      if cont then
+        regs[base + A + 3] = idx
+        pc = pc + sBx
+      end
+    end
+    H[OP_TFORLOOP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      if regs[base + A + 3] ~= nil then
+        regs[base + A + 2] = regs[base + A + 3]
+        pc = pc + sBx
+      end
+    end
+    H[OP_TFORCALL] = function()
+      local fn = regs[base + A]
+      if type(fn) == "function" then
+        local results = {fn(regs[base + A + 1], regs[base + A + 2])}
+        for j = 1, C do
+          regs[base + A + 2 + j] = results[j]
+        end
+      end
+    end
+    H[OP_TFORPREP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      pc = pc + sBx
+    end
+    H[OP_TEST] = function()
+      local v = regs[base + A]
+      local truthy = v and v ~= false
+      if (truthy and C == 0) or (not truthy and C ~= 0) then pc = pc + 1 end
+    end
+    H[OP_TESTSET] = function()
+      local v = regs[base + B]
+      local truthy = v and v ~= false
+      if (truthy and C == 0) or (not truthy and C ~= 0) then
+        pc = pc + 1
+      else
+        regs[base + A] = v
+      end
+    end
+    H[OP_CALL] = function()
+      local fn = regs[base + A]
+      if type(fn) == "function" then
+        local nargs = B - 1
+        local results
+        if nargs <= 0 then
+          results = {fn()}
+        elseif nargs == 1 then
+          results = {fn(regs[base + A + 1])}
+        elseif nargs == 2 then
+          results = {fn(regs[base + A + 1], regs[base + A + 2])}
+        elseif nargs == 3 then
+          results = {fn(regs[base + A + 1], regs[base + A + 2], regs[base + A + 3])}
+        else
+          local args = {}
+          for j = 1, nargs do args[j] = regs[base + A + j] end
+          results = {fn(table.unpack(args))}
+        end
+        if C > 0 then
+          for j = 1, C - 1 do
+            regs[base + A + j - 1] = results[j]
+          end
+        else
+          regs[base + A] = results[1]
+        end
+      end
+    end
+    H[OP_TAILCALL] = function()
+      local fn = regs[base + A]
+      if type(fn) == "function" then
+        local nargs = B - 1
+        if nargs <= 0 then return "RET", {fn()}
+        elseif nargs == 1 then return "RET", {fn(regs[base + A + 1])}
+        elseif nargs == 2 then return "RET", {fn(regs[base + A + 1], regs[base + A + 2])}
+        elseif nargs == 3 then return "RET", {fn(regs[base + A + 1], regs[base + A + 2], regs[base + A + 3])}
+        else
+          local args = {}
+          for j = 1, nargs do args[j] = regs[base + A + j] end
+          return "RET", {fn(table.unpack(args))}
+        end
+      end
+    end
+    H[OP_RETURN] = function()
+      if B >= 2 then
+        local results = {}
+        for j = 0, B - 2 do results[j + 1] = regs[base + A + j] end
+        return "RET", results
+      elseif B == 1 then
+        return "RET", {regs[base + A]}
+      else
+        return "RET", {}
+      end
+    end
+    H[OP_CLOSURE] = function()
+      local sub_proto = consts[B]
+      if type(sub_proto) == "table" and sub_proto.code then
+        local captured_upvals = {}
+        if sub_proto.upvalues then
+          for ui, uv_desc in ipairs(sub_proto.upvalues) do
+            captured_upvals[ui] = { regs, base + uv_desc.reg }
+          end
+        end
+        regs[base + A] = function(...)
+          local sub_regs = {}
+          local args = {...}
+          local n = select("#", ...)
+          for ai = 1, sub_proto.numparams do
+            sub_regs[ai - 1] = args[ai]
+          end
+          local vargs = {}
+          for vi = sub_proto.numparams + 1, n do
+            vargs[#vargs + 1] = args[vi]
+          end
+          return exec_proto(sub_proto, sub_regs, 0, n, captured_upvals, vargs)
+        end
+      end
+    end
+    H[OP_VARARG] = function()
+      if B == 0 then
+        if varargs then
+          for j = 1, #varargs do
+            regs[base + A + j - 1] = varargs[j]
+          end
+        end
+      else
+        for j = 0, B - 2 do
+          regs[base + A + j] = varargs and varargs[j + 1] or nil
+        end
+      end
+    end
+    H[OP_SETLIST] = function()
+      local t = regs[base + A]
+      if type(t) == "table" then
+        for j = 1, C do
+          t[B + j - 1] = regs[base + A + j]
+        end
+      end
+    end
+    H[OP_EXTRARG] = function() end
 
     while pc <= #code do
       local ins = code[pc]
-      local op, A, B, C = ins.op, ins.a, ins.b, ins.c
+      local op = ins.op
+      A, B, C = ins.a, ins.b, ins.c
       pc = pc + 1
-
-      if op == OP_NOP then
-      elseif op == OP_LOADK then
-        regs[base + A] = consts[B]
-      elseif op == OP_LOADBOOL then
-        regs[base + A] = B ~= 0
-        if C ~= 0 then pc = pc + 1 end
-      elseif op == OP_LOADNIL then
-        for i = 0, B do regs[base + A + i] = nil end
-      elseif op == OP_MOVE then
-        regs[base + A] = regs[base + B]
-      elseif op == OP_GETGLOBAL then
-        local key = consts[B]
-        regs[base + A] = _G[key]
-      elseif op == OP_SETGLOBAL then
-        _G[consts[B]] = regs[base + A]
-      elseif op == OP_GETUPVAL then
-        if upvals and upvals[B + 1] then
-          local uv = upvals[B + 1]
-          regs[base + A] = uv[1][uv[2]]
+      local h = H[op]
+      if h then
+        local tag, pack = h()
+        if tag == "RET" then
+          return table.unpack(pack or {})
         end
-      elseif op == OP_SETUPVAL then
-        if upvals and upvals[B + 1] then
-          local uv = upvals[B + 1]
-          uv[1][uv[2]] = regs[base + A]
-        end
-      elseif op == OP_GETUPVAL then
-        if upvals and upvals[B + 1] then
-          local uv = upvals[B + 1]
-          regs[base + A] = uv[1][uv[2]]
-        end
-      elseif op == OP_SETUPVAL then
-        if upvals and upvals[B + 1] then
-          local uv = upvals[B + 1]
-          uv[1][uv[2]] = regs[base + A]
-        end
-      elseif op == OP_GETTABLE then
-        local t = regs[base + B]
-        local k = regs[base + C]
-        if type(t) == "table" then
-          regs[base + A] = t[k]
-        else
-          regs[base + A] = nil
-        end
-      elseif op == OP_SETTABLE then
-        local t = regs[base + A]
-        local k = regs[base + B]
-        local v = regs[base + C]
-        if type(t) == "table" then t[k] = v end
-      elseif op == OP_NEWTABLE then
-        regs[base + A] = {}
-      elseif op == OP_ADD then
-        local l, r = regs[base + B], regs[base + C]
-        regs[base + A] = (type(l) == "number" and type(r) == "number") and (l + r) or (tonumber(l) or 0) + (tonumber(r) or 0)
-      elseif op == OP_SUB then
-        local l, r = regs[base + B], regs[base + C]
-        regs[base + A] = l - r
-      elseif op == OP_MUL then
-        local l, r = regs[base + B], regs[base + C]
-        regs[base + A] = l * r
-      elseif op == OP_DIV then
-        local l, r = regs[base + B], regs[base + C]
-        regs[base + A] = l / r
-      elseif op == OP_IDIV then
-        local l, r = regs[base + B], regs[base + C]
-        regs[base + A] = l // r
-      elseif op == OP_MOD then
-        local l, r = regs[base + B], regs[base + C]
-        regs[base + A] = l %% r
-      elseif op == OP_POW then
-        regs[base + A] = regs[base + B] ^ regs[base + C]
-      elseif op == OP_BAND then
-        regs[base + A] = regs[base + B] & regs[base + C]
-      elseif op == OP_BOR then
-        regs[base + A] = regs[base + B] | regs[base + C]
-      elseif op == OP_BXOR then
-        regs[base + A] = regs[base + B] ~ regs[base + C]
-      elseif op == OP_SHL then
-        regs[base + A] = regs[base + B] << regs[base + C]
-      elseif op == OP_SHR then
-        regs[base + A] = regs[base + B] >> regs[base + C]
-      elseif op == OP_UNM then
-        regs[base + A] = -regs[base + B]
-      elseif op == OP_BNOT then
-        regs[base + A] = ~regs[base + B]
-      elseif op == OP_NOT then
-        regs[base + A] = not regs[base + B]
-      elseif op == OP_LEN then
-        regs[base + A] = #regs[base + B]
-      elseif op == OP_CONCAT then
-        -- Optimized: avoid tostring for strings, use direct concat
-        local v = regs[base + B]
-        local s = type(v) == 'string' and v or tostring(v)
-        for j = B + 1, C do
-          v = regs[base + j]
-          s = s .. (type(v) == 'string' and v or tostring(v))
-        end
-        regs[base + A] = s
-      elseif op == OP_EQ then
-        local l, r = regs[base + B], regs[base + C]
-        local eq = (l == r)
-        -- A=0: skip next if equal; A=1: skip next if not equal
-        if (eq and A == 0) or (not eq and A == 1) then
-          pc = pc + 1
-        end
-      elseif op == OP_LT then
-        local l, r = regs[base + B], regs[base + C]
-        local lt = (l < r)
-        if (lt and A == 0) or (not lt and A == 1) then
-          pc = pc + 1
-        end
-      elseif op == OP_LE then
-        local l, r = regs[base + B], regs[base + C]
-        local le = (l <= r)
-        if (le and A == 0) or (not le and A == 1) then
-          pc = pc + 1
-        end
-      elseif op == OP_JMP then
-        -- B is sBx (signed offset, 32-bit)
-        local sBx = B
-        if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
-        pc = pc + sBx
-      elseif op == OP_FORPREP then
-        -- R[A] -= R[A+2]; jump to FORLOOP
-        local sBx = B
-        if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
-        regs[base + A] = regs[base + A] - regs[base + A + 2]
-        pc = pc + sBx
-      elseif op == OP_FORLOOP then
-        -- R[A] += R[A+2]; if in range, set R[A+3]=R[A] and jump
-        local sBx = B
-        if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
-        regs[base + A] = regs[base + A] + regs[base + A + 2]
-        local step = regs[base + A + 2]
-        local limit = regs[base + A + 1]
-        local idx = regs[base + A]
-        local cont
-        if step > 0 then
-          cont = idx <= limit
-        else
-          cont = idx >= limit
-        end
-        if cont then
-          regs[base + A + 3] = idx
-          pc = pc + sBx
-        end
-      elseif op == OP_TFORLOOP then
-        -- if R[A+3] ~= nil then R[A+2]=R[A+3] else pc++
-        local sBx = B
-        if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
-        if regs[base + A + 3] ~= nil then
-          regs[base + A + 2] = regs[base + A + 3]
-          pc = pc + sBx
-        end
-      elseif op == OP_TFORCALL then
-        -- R[A+3..A+2+C] = R[A](R[A+1], R[A+2])
-        local fn = regs[base + A]
-        local state = regs[base + A + 1]
-        local control = regs[base + A + 2]
-        if type(fn) == "function" then
-          local results = {fn(state, control)}
-          for j = 1, C do
-            regs[base + A + 2 + j] = results[j]
-          end
-        end
-      elseif op == OP_TEST then
-        local v = regs[base + A]
-        local truthy = v and v ~= nil and v ~= false
-        if (truthy and C == 0) or (not truthy and C ~= 0) then
-          pc = pc + 1
-        end
-      elseif op == OP_TESTSET then
-        local v = regs[base + B]
-        local truthy = v and v ~= nil and v ~= false
-        if (truthy and C == 0) or (not truthy and C ~= 0) then
-          pc = pc + 1
-        else
-          regs[base + A] = v
-        end
-      elseif op == OP_CALL then
-        local fn = regs[base + A]
-        if type(fn) == "function" then
-          -- Build arg list preserving nil values (table assignment skips nil keys)
-          local nargs = B - 1
-          local results
-          if nargs == 0 then
-            results = {fn()}
-          elseif nargs == 1 then
-            results = {fn(regs[base + A + 1])}
-          elseif nargs == 2 then
-            results = {fn(regs[base + A + 1], regs[base + A + 2])}
-          elseif nargs == 3 then
-            results = {fn(regs[base + A + 1], regs[base + A + 2], regs[base + A + 3])}
-          else
-            local args = {}
-            for j = 1, nargs do args[j] = regs[base + A + j] end
-            results = {fn(table.unpack(args))}
-          end
-          if C > 0 then
-            for j = 1, C - 1 do
-              regs[base + A + j - 1] = results[j]
-            end
-
-          else
-            regs[base + A] = results[1]
-          end
-        end
-      elseif op == OP_TAILCALL then
-        local fn = regs[base + A]
-        if type(fn) == "function" then
-          local nargs = B - 1
-          if nargs == 0 then return fn()
-          elseif nargs == 1 then return fn(regs[base + A + 1])
-          elseif nargs == 2 then return fn(regs[base + A + 1], regs[base + A + 2])
-          elseif nargs == 3 then return fn(regs[base + A + 1], regs[base + A + 2], regs[base + A + 3])
-          else
-            local args = {}
-            for j = 1, nargs do args[j] = regs[base + A + j] end
-            return fn(table.unpack(args))
-          end
-        end
-      elseif op == OP_RETURN then
-        if B >= 2 then
-          local results = {}
-          for j = 0, B - 2 do results[j + 1] = regs[base + A + j] end
-          return table.unpack(results)
-        elseif B == 1 then
-          return regs[base + A]
-        else
-          return
-        end
-      elseif op == OP_CLOSURE then
-        local sub_proto = consts[B]
-        if type(sub_proto) == "table" and sub_proto.code then
-          -- Capture upvalues from parent scope
-          local captured_upvals = {}
-          if sub_proto.upvalues then
-            for ui, uv_desc in ipairs(sub_proto.upvalues) do
-              captured_upvals[ui] = { regs, base + uv_desc.reg }
-            end
-          end
-          regs[base + A] = function(...)
-            local sub_regs = {}
-            local args = {...}
-            local n = select("#", ...)
-            for ai = 1, sub_proto.numparams do
-              sub_regs[ai - 1] = args[ai]
-            end
-            -- Store varargs (args beyond numparams)
-            local vargs = {}
-            for vi = sub_proto.numparams + 1, n do
-              vargs[#vargs + 1] = args[vi]
-            end
-            return exec_proto(sub_proto, sub_regs, 0, n, captured_upvals, vargs)
-          end
-        end
-      elseif op == OP_VARARG then
-        -- R[A..A+B-2] = ...
-        if B == 0 then
-          -- Copy all varargs (used in expressions like f(...))
-          -- Simplified: just copy what we have
-          if varargs then
-            for j = 1, #varargs do
-              regs[base + A + j - 1] = varargs[j]
-            end
-          end
-        else
-          -- Copy B-1 varargs
-          for j = 0, B - 2 do
-            regs[base + A + j] = varargs and varargs[j + 1] or nil
-          end
-        end
-      elseif op == OP_EXTRAARG then
-        -- Extra argument, skip
-        local _ = nil
       end
     end
   end
 
-  -- Anti-tamper: verify data integrity
-  -- _cs_seed and _cs_expect are embedded as format params (immune to number encryption)
   local _cs = _cs_seed
   for _i = 1, #_d do
     _cs = (_cs + _d[_i] * (_i + _cs_seed)) & 0xFFFF
@@ -2824,20 +2933,16 @@ do
     error('integrity check failed')
   end
 
-  -- Decode and run
-  local main_proto = decode_proto(1, 0)
+  local main_proto = decode_proto(1)
   local regs = {}
   exec_proto(main_proto, regs, 0, 0, nil)
-  _G._pack = _orig_pack  -- restore original
+  _G._pack = _orig_pack
+end
+]====]
 
+  return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)
 end
 
-]===], data_str, key, seed, cs)
-end
-
-------------------------------------------------------------
--- 主保护函数
-------------------------------------------------------------
 local function vm_protect(source_code)
   math.randomseed(math.floor(os.time() + os.clock() * 10000))
   local function random_int(min, max)

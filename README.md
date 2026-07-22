@@ -136,7 +136,7 @@ MIT License · Author: Rainy_qwq
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| 2.6.0 | 2025-07-22 | 性能优化（var_mangle/string_pool/pass_manager）；手机端响应式适配；bb_split 默认开启（CLI + Web）；BCF then/else 分支交换修复；bb_split JS 模板字面量转义修复 |
+| 2.7.0 | 2025-07-22 | 性能优化（var_mangle/string_pool/pass_manager）；手机端响应式适配；bb_split 默认开启（CLI + Web）；BCF then/else 分支交换修复；bb_split JS 模板字面量转义修复 |
 | 2.5.1 | 2025-07-22 | 修复 CLI 默认配置（三个不稳定 Pass 改为关闭）；VM 模式自动禁用不兼容 Pass；adv_fake_cf 修复 return 语句后注入 bug |
 | 2.5.2 | 2025-07-22 | 新增基本块拆分 Pass（bb_split）；修复 return 语句编译错误；Web 端同步更新 |
 | 2.5.0 | 2025-07-22 | Pass 架构重构，字符串池保护，Web Worker |
