@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Lua binary executables
+lua
+lua54.exe
+lua53.exe
+lua52.exe
+lua51.exe
+luajit.exe
+*.exe
+
+# Temp/workspace files
+.openclaw/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+*.swp
+*.swo
+*~
+*.bak
