@@ -1,4 +1,4 @@
-﻿# v2.9.0 Release Notes
+# v2.9.0 Release Notes
 
 ## Release Date: 2026-07-23
 

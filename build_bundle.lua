@@ -78,6 +78,8 @@ local pass_files = {
   {"passes.bb_split", "passes/bb_split.lua"},
  {"passes.junk_comment", "passes/junk_comment.lua"},
   {"passes.header", "passes/header.lua"},
+  {"passes.anti_debug", "passes/anti_debug.lua"},
+  {"passes.call_indirect", "passes/call_indirect.lua"},
   {"passes.init", "passes/init.lua"},
 }
 

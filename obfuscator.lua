@@ -77,6 +77,8 @@ local Config = {
  bogus_control_flow        = false,
   basic_block_splitting    = true,
  junk_comments             = true,
+  anti_debug               = false,
+  call_indirection         = false,
 }
 
 -- Config key → Pass name 映射
@@ -91,6 +93,8 @@ local CONFIG_TO_PASS = {
  bogus_control_flow        = "bogus_control_flow",
   basic_block_splitting    = "basic_block_splitting",
  junk_comments             = "junk_comments",
+  anti_debug               = "anti_debug",
+  call_indirection         = "call_indirection",
 }
 
 -- 将 Config 同步到 PassManager
@@ -164,6 +168,8 @@ local feature_names = {
  { key = "advanced_fake_cf",         name = "虚假控制流增强" },
   { key = "basic_block_splitting",   name = "基本块拆分" },
  { key = "vm_protect",               name = "VM字节码虚拟化" },
+  { key = "anti_debug",               name = "反调试检测" },
+  { key = "call_indirection",         name = "调用间接化" },
 }
 
 local function print_banner()
