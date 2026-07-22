@@ -25,31 +25,40 @@ M.pool = {}
 ------------------------------------------------------------
 -- 辅助：简单 PRNG（线性同余，种子派生每字符串唯一 key）
 ------------------------------------------------------------
+-- 32-bit multiply (safe under float64 / Fengari; avoids "no integer representation")
+local function imul32(a, b)
+  a = a & 0xFFFFFFFF
+  b = b & 0xFFFFFFFF
+  local ah, al = (a >> 16) & 0xFFFF, a & 0xFFFF
+  local bh, bl = (b >> 16) & 0xFFFF, b & 0xFFFF
+  local lo = (al * bl) & 0xFFFFFFFF
+  local mid = ((ah * bl) + (al * bh)) & 0xFFFF
+  return (lo + (mid << 16)) & 0xFFFFFFFF
+end
+
 local function prng(seed)
-  seed = (seed ~ (seed >> 16)) * 0x45d9f3b
-  seed = (seed ~ (seed >> 16)) * 0x45d9f3b
+  seed = seed & 0xFFFFFFFF
+  seed = imul32(seed ~ (seed >> 16), 0x45d9f3b)
+  seed = imul32(seed ~ (seed >> 16), 0x45d9f3b)
   seed = seed ~ (seed >> 16)
   return seed & 0xFFFF
 end
 
--- 从字符串内容派生一个稳定的整数种子（用于 key + shuffle seed）
+-- 从字符串内容派生稳定 31-bit 种子（FNV-1a, 32-bit）
 local function derive_seed(str)
   local h = 2166136261
   for i = 1, #str do
-    h = h ~ str:byte(i)
-    h = h * 16777619
+    h = imul32(h ~ str:byte(i), 16777619)
   end
   return h & 0x7FFFFFFF
 end
 
 -- 8 位十六进制哈希（用于源码中的索引键）
 local function str_hash(str)
-  local h = derive_seed(str)
-  return string.format("%08X", h & 0xFFFFFFFF)
+  local h = derive_seed(str) & 0xFFFFFFFF
+  return string.format("%08X", h)
 end
 
-------------------------------------------------------------
--- 辅助：Fisher-Yates 乱序
 ------------------------------------------------------------
 local function shuffle(t, seed)
   math.randomseed(seed)

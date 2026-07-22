@@ -525,31 +525,40 @@ M.pool = {}
 ------------------------------------------------------------
 -- 辅助：简单 PRNG（线性同余，种子派生每字符串唯一 key）
 ------------------------------------------------------------
+-- 32-bit multiply (safe under float64 / Fengari; avoids "no integer representation")
+local function imul32(a, b)
+  a = a & 0xFFFFFFFF
+  b = b & 0xFFFFFFFF
+  local ah, al = (a >> 16) & 0xFFFF, a & 0xFFFF
+  local bh, bl = (b >> 16) & 0xFFFF, b & 0xFFFF
+  local lo = (al * bl) & 0xFFFFFFFF
+  local mid = ((ah * bl) + (al * bh)) & 0xFFFF
+  return (lo + (mid << 16)) & 0xFFFFFFFF
+end
+
 local function prng(seed)
-  seed = (seed ~ (seed >> 16)) * 0x45d9f3b
-  seed = (seed ~ (seed >> 16)) * 0x45d9f3b
+  seed = seed & 0xFFFFFFFF
+  seed = imul32(seed ~ (seed >> 16), 0x45d9f3b)
+  seed = imul32(seed ~ (seed >> 16), 0x45d9f3b)
   seed = seed ~ (seed >> 16)
   return seed & 0xFFFF
 end
 
--- 从字符串内容派生一个稳定的整数种子（用于 key + shuffle seed）
+-- 从字符串内容派生稳定 31-bit 种子（FNV-1a, 32-bit）
 local function derive_seed(str)
   local h = 2166136261
   for i = 1, #str do
-    h = h ~ str:byte(i)
-    h = h * 16777619
+    h = imul32(h ~ str:byte(i), 16777619)
   end
   return h & 0x7FFFFFFF
 end
 
 -- 8 位十六进制哈希（用于源码中的索引键）
 local function str_hash(str)
-  local h = derive_seed(str)
-  return string.format("%08X", h & 0xFFFFFFFF)
+  local h = derive_seed(str) & 0xFFFFFFFF
+  return string.format("%08X", h)
 end
 
-------------------------------------------------------------
--- 辅助：Fisher-Yates 乱序
 ------------------------------------------------------------
 local function shuffle(t, seed)
   math.randomseed(seed)
@@ -5167,18 +5176,15 @@ local function obfuscate(code, vm_module)
   local ok, result, log = pcall(pm.run, pm, code, {
     vm_module = vm_module,
   })
-  print("[DBG] pm.run ok=" .. tostring(ok) .. " result_type=" .. type(result) .. " result_len=" .. (result and #result or 0))
 
   if not ok then
     error("混淆失败: " .. tostring(result))
   end
-  print("[DBG] string_encrypt do_vm=" .. tostring(do_vm) .. " result_len=" .. (result and #result or 0))
 
   -- 字符串恢复（VM保护时跳过）
   if not do_vm then
     local string_pass = pm:get("string_encryption")
     local do_encrypt = string_pass and string_pass.enabled
-  print("[DBG] string_pass=" .. tostring(string_pass) .. " do_encrypt=" .. tostring(do_encrypt))
     if do_encrypt then
       result = string_pool.restore(result)
     else
