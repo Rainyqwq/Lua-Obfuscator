@@ -19,6 +19,7 @@ local M = {}
 -- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
 local BUILTIN = {
   "passes.vm_protect",
+  "passes.anti_debug",
   "passes.string_encrypt",
   "passes.num_encrypt",
   "passes.instr_sub",
@@ -28,6 +29,7 @@ local BUILTIN = {
  "passes.bcf",
   "passes.bb_split",
  "passes.junk_comment",
+  "passes.call_indirect",
   "passes.header",
 }
 
