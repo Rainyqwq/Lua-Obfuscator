@@ -128,15 +128,18 @@ local function obfuscate(code, vm_module)
   local ok, result, log = pcall(pm.run, pm, code, {
     vm_module = vm_module,
   })
+  print("[DBG] pm.run ok=" .. tostring(ok) .. " result_type=" .. type(result) .. " result_len=" .. (result and #result or 0))
 
   if not ok then
     error("混淆失败: " .. tostring(result))
   end
+  print("[DBG] string_encrypt do_vm=" .. tostring(do_vm) .. " result_len=" .. (result and #result or 0))
 
   -- 字符串恢复（VM保护时跳过）
   if not do_vm then
     local string_pass = pm:get("string_encryption")
     local do_encrypt = string_pass and string_pass.enabled
+  print("[DBG] string_pass=" .. tostring(string_pass) .. " do_encrypt=" .. tostring(do_encrypt))
     if do_encrypt then
       result = string_pool.restore(result)
     else
