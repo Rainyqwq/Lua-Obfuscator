@@ -1,79 +1,78 @@
-# 项目详细文档
+# ??????
 
-**版本：v2.8.1**
+**???v2.9.0**
 
-## 架构
+## ??
 
-### 混淆流程
+### ????
 
 ```
-源代码
-  ↓
-字符串提取 (string_pool.extract)   — 非 VM 路径
-  ↓ 字符串 → __STRn__ 占位符
-  ↓
-Pass Pipeline（按 order 排序，用户启用的全部执行，不静默禁用）
-  ├─ vm_protect (10)           VM 字节码虚拟化
-  ├─ anti_debug (15)           反调试
-  ├─ string_encryption (20)    字符串加密标记
-  ├─ variable_mangling (30)    变量名混淆
-  ├─ instruction_substitution (40)
-  ├─ constant_encryption (50)  常量数字加密
-  ├─ advanced_fake_cf (65)
-  ├─ control_flow_flattening (70)
-  ├─ bogus_control_flow (80)
-  ├─ call_indirection (85)
-  ├─ basic_block_splitting (90)
-  ├─ junk_comments (100)
-  └─ header (200)
-  ↓
-字符串恢复 (string_pool.restore / restore_raw)  — 非 VM 路径
-  ↓
-输出
+???
+  ? ????? (string_pool.extract)   ? ? VM ????? string_whitelist
+  ? ??? ? ???
+  ? Pass Pipeline?? order ???????????????????
+  ? ????? (string_pool.restore / restore_raw)
+  ? ??
 ```
 
-> VM 路径下字符串由 VM 自己的 char-pool / 常量编码处理，跳过 string_pool 提取/恢复。
+> VM ??????? VM ??? char-pool / ????????? string_pool ??/???
 
-### 设计原则
+### ?????P1?
 
-1. **Pass 独立**：每个 Pass 应在任意合法 Lua 输入上保持语义；组合失败优先修 Pass，而非在流水线里静默关闭。
-2. **Fengari 安全**：位运算与 `string.format("%X")` 前必须 `to_u32` / 手写 hex，避免 “number has no integer representation”。
-3. **Web / CLI 同源**：`build_bundle.lua` + `build_html.js` 把模块内联进 `index.html`。
-
-### 关键模块
-
-| 文件 | 职责 |
+| ?? | ?? |
 |------|------|
-| `obfuscator.lua` | CLI、Config、JS Bridge、`obfuscate_code` |
-| `pass_manager.lua` | 注册 / 排序 / 执行 Pipeline |
-| `passes/string_pool.lua` | 字符串提取与分层加密恢复 |
-| `passes/vm.lua` | 解析 → 编译 → op-pool/char-pool 编码 → 解释器源码 |
-| `passes/num_encrypt.lua` | 安全数字字面量加密 |
-| `index.html` | Fengari 前端、Worker 混淆、运行超时 hook |
+| `fast` | str + var + num + junk |
+| `balanced` | ??? vm/anti_debug ??? |
+| `max` | ???? |
 
-### 构建
+?????`M.apply_preset` / CLI `--preset` / Web ?????  
+???? Pass ????? `custom`?
+
+### ????P1?
+
+- `name_whitelist` ? `variable_mangling` ? `ctx.config.whitelist`
+- `string_whitelist` ? `string_pool.set_whitelist`?extract ?????
+
+### ????
+
+- `export_user_config` / `import_user_config`?preset + pass flags + whitelist + passes ??
+- CLI?`--export-config` / `--import-config`
+- Web?JSON ??/??
+
+### ????
+
+1. **Pass ??**???????? Pass???????????
+2. **Fengari ??**????? hex ??? `to_u32` / ?? hex?
+3. **Web / CLI ??**?`build_bundle.lua` + `build_html.js`?
+
+### ????
+
+| ?? | ?? |
+|------|------|
+| `obfuscator.lua` | CLI?Config????????JS Bridge |
+| `pass_manager.lua` | ?? / ?? / Pipeline / ?? |
+| `passes/string_pool.lua` | ?????????? + ??? |
+| `passes/var_mangle.lua` | ???? + ????? |
+| `index.html` | ?? UI????????? JSON |
+
+### ??
 
 ```bash
-lua build_bundle.lua   # → obfuscator_bundle.lua
-node build_html.js     # 注入 index.html 的 OBFUSCATOR_LUA
+lua build_bundle.lua
+node build_html.js
 ```
 
-### 测试建议
+### ????
 
-- `tests/test_full.lua`：语言特性基线  
-- 组合：全 Pass ± VM 对 fib 等样例做 10+ 轮随机种子回归  
-- Web：Ctrl+F5 后测「混淆 / 运行混淆后」
+- `tests/test_p0_regression.lua`
+- `tests/test_p1_presets_whitelist.lua`
+- `tests/test_full.lua`
+- Web?Ctrl+F5 ????????
 
-## 已知边界
+## Pipeline ??
 
-- 文本 Pass 基于行/正则，极端多行表达式仍可能有边角问题  
-- 反调试的 hook 检测会在外层 `debug.sethook` 时主动报错（预期行为）  
-- VM 解释器设有步数上限，防止损坏字节码导致浏览器卡死  
+`PassManager:run(code, { max_total_ms = N })` ?? `120000` ms?Web ?????? 90 ??
 
 ## License
 
-MIT · Rainy_qwq
-
-## Pipeline 超时
-
-`PassManager:run(code, { max_total_ms = N })` 可限制整条流水线总耗时。主程序默认 `120000` ms。Web 异步混淆超时 90 秒。
+MIT ? Rainy_qwq

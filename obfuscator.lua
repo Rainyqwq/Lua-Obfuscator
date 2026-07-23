@@ -49,7 +49,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.8.2"
+local VERSION = "2.9.0"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -74,14 +74,18 @@ local Config = {
   constant_encryption       = true,
   advanced_fake_cf          = true,
   control_flow_flattening   = true,
- bogus_control_flow        = true,
-  basic_block_splitting    = true,
- junk_comments             = true,
-  anti_debug               = false,
+  bogus_control_flow        = true,
+  basic_block_splitting     = true,
+  junk_comments             = true,
+  anti_debug                = false,
   call_indirection          = true,
+  -- P1: protection lists (not pass toggles)
+  name_whitelist            = {}, -- identifier names preserved by var_mangle
+  string_whitelist          = {}, -- exact string values kept plaintext
+  preset                    = "balanced",
 }
 
--- Config key → Pass name 映射
+-- Config key -> Pass name mapping
 local CONFIG_TO_PASS = {
   vm_protect                = "vm_protect",
   string_encryption         = "string_encryption",
@@ -90,18 +94,87 @@ local CONFIG_TO_PASS = {
   constant_encryption       = "constant_encryption",
   advanced_fake_cf          = "advanced_fake_cf",
   control_flow_flattening   = "control_flow_flattening",
- bogus_control_flow        = "bogus_control_flow",
-  basic_block_splitting    = "basic_block_splitting",
- junk_comments             = "junk_comments",
-  anti_debug               = "anti_debug",
-  call_indirection         = "call_indirection",
+  bogus_control_flow        = "bogus_control_flow",
+  basic_block_splitting     = "basic_block_splitting",
+  junk_comments             = "junk_comments",
+  anti_debug                = "anti_debug",
+  call_indirection          = "call_indirection",
 }
 
--- 将 Config 同步到 PassManager
+local PASS_KEYS = {
+  "vm_protect", "string_encryption", "variable_mangling",
+  "instruction_substitution", "constant_encryption", "advanced_fake_cf",
+  "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
+  "junk_comments", "anti_debug", "call_indirection",
+}
+
+-- Protection presets: fast / balanced / max
+local PRESETS = {
+  fast = {
+    vm_protect = false, anti_debug = false,
+    string_encryption = true, variable_mangling = true,
+    instruction_substitution = false, constant_encryption = true,
+    advanced_fake_cf = false, control_flow_flattening = false,
+    bogus_control_flow = false, basic_block_splitting = false,
+    junk_comments = true, call_indirection = false,
+  },
+  balanced = {
+    vm_protect = false, anti_debug = false,
+    string_encryption = true, variable_mangling = true,
+    instruction_substitution = true, constant_encryption = true,
+    advanced_fake_cf = true, control_flow_flattening = true,
+    bogus_control_flow = true, basic_block_splitting = true,
+    junk_comments = true, call_indirection = true,
+  },
+  max = {
+    vm_protect = true, anti_debug = true,
+    string_encryption = true, variable_mangling = true,
+    instruction_substitution = true, constant_encryption = true,
+    advanced_fake_cf = true, control_flow_flattening = true,
+    bogus_control_flow = true, basic_block_splitting = true,
+    junk_comments = true, call_indirection = true,
+  },
+}
+
+local function copy_list(src)
+  local out = {}
+  if type(src) ~= "table" then return out end
+  for k, v in pairs(src) do
+    if type(k) == "number" and type(v) == "string" and v ~= "" then
+      out[#out + 1] = v
+    elseif type(k) == "string" and k ~= "" and v then
+      out[#out + 1] = k
+    end
+  end
+  table.sort(out)
+  return out
+end
+
+local function list_to_set(list)
+  local set = {}
+  for _, name in ipairs(copy_list(list)) do set[name] = true end
+  return set
+end
+
+local function apply_preset(name)
+  local p = PRESETS[name]
+  if not p then return false, "unknown preset: " .. tostring(name) end
+  for _, key in ipairs(PASS_KEYS) do
+    if p[key] ~= nil then Config[key] = p[key] end
+  end
+  Config.preset = name
+  return true
+end
+
+-- Sync Config to PassManager / pass configs / string pool
 local function sync_config_to_passes()
   for config_key, pass_name in pairs(CONFIG_TO_PASS) do
-    pm:set_enabled(pass_name, Config[config_key])
+    pm:set_enabled(pass_name, Config[config_key] and true or false)
   end
+  pm:set_pass_config("variable_mangling", {
+    whitelist = list_to_set(Config.name_whitelist),
+  })
+  string_pool.set_whitelist(Config.string_whitelist)
 end
 
 -- ============================================================
@@ -294,17 +367,22 @@ Lua Obfuscator v%s - 使用说明
 选项:
   -i, --input <file>    输入文件
   -o, --output <file>   输出文件（默认: <input>_obf.lua）
-  --vm                  启用 VM 字节码虚拟化
-  --no-cfe              禁用控制流平坦化
-  --no-num              禁用常量数字加密
-  --no-bcf              禁用 BCF 虚假控制流
-  --no-var              禁用变量名混淆
-  --no-str              禁用字符串加密
-  --no-junk             禁用垃圾注释
-  --no-instr            禁用指令替换
- --no-advbcf           禁用虚假控制流增强
-  --no-bbsplit         禁用基本块拆分
- --demo                运行演示
+  --preset <name>          protection preset: fast | balanced | max
+  --vm                     enable VM bytecode virtualization
+  --preserve-name <id>     name whitelist (repeatable)
+  --preserve-string <s>    string whitelist (repeatable, exact match)
+  --export-config <file>   export current config as Lua table
+  --import-config <file>   import config from Lua table
+  --no-cfe                 disable control flow flattening
+  --no-num                 disable constant number encryption
+  --no-bcf                 disable BCF
+  --no-var                 disable variable mangling
+  --no-str                 disable string encryption
+  --no-junk                disable junk comments
+  --no-instr               disable instruction substitution
+  --no-advbcf              disable advanced fake CF
+  --no-bbsplit             disable basic block splitting
+  --demo                   run demo
   -h, --help            显示帮助
 
 交互模式:
@@ -320,7 +398,7 @@ local function interactive_loop()
   local _is_cli = false
   for i = 1, #arg do
     local v = arg[i]
-    if v == "-i" or v == "--input" or v == "--help" or v == "-h" or v == "--demo" then
+    if v == "-i" or v == "--input" or v == "--help" or v == "-h" or v == "--demo" or v == "--export-config" or v == "--import-config" or v == "--preset" then
       _is_cli = true
       break
     end
@@ -398,13 +476,8 @@ end
 local M = {}
 
 function M.obfuscate_code(code, options, vm_module)
-  -- 将 JS options 映射到 Config
   if options then
-    for key, value in pairs(options) do
-      if Config[key] ~= nil then
-        Config[key] = value
-      end
-    end
+    M.set_config(options)
   end
 
   local ok, result = pcall(obfuscate, code, vm_module)
@@ -415,15 +488,51 @@ function M.obfuscate_code(code, options, vm_module)
 end
 
 function M.get_config()
-  return Config
+  local cfg = {}
+  for _, key in ipairs(PASS_KEYS) do cfg[key] = Config[key] and true or false end
+  cfg.preset = Config.preset
+  cfg.name_whitelist = copy_list(Config.name_whitelist)
+  cfg.string_whitelist = copy_list(Config.string_whitelist)
+  return cfg
 end
 
 function M.set_config(options)
-  for key, value in pairs(options) do
-    if Config[key] ~= nil then
-      Config[key] = value
-    end
+  if type(options) ~= "table" then return end
+  local has_pass_key = false
+  for key, _ in pairs(options) do
+    if CONFIG_TO_PASS[key] ~= nil then has_pass_key = true; break end
   end
+  if options.preset and PRESETS[options.preset] and not has_pass_key then
+    apply_preset(options.preset)
+  elseif options.preset and PRESETS[options.preset] and has_pass_key then
+    apply_preset(options.preset)
+    for key, value in pairs(options) do
+      if CONFIG_TO_PASS[key] ~= nil then
+        Config[key] = value and true or false
+      end
+    end
+    Config.preset = "custom"
+  elseif has_pass_key then
+    for key, value in pairs(options) do
+      if CONFIG_TO_PASS[key] ~= nil then
+        Config[key] = value and true or false
+      end
+    end
+    Config.preset = "custom"
+  end
+  if options.name_whitelist ~= nil then
+    Config.name_whitelist = copy_list(options.name_whitelist)
+  end
+  if options.string_whitelist ~= nil then
+    Config.string_whitelist = copy_list(options.string_whitelist)
+  end
+end
+function M.apply_preset(name)
+  return apply_preset(name)
+end
+
+function M.list_presets()
+  return { "fast", "balanced", "max" }
 end
 
 function M.list_passes()
@@ -446,7 +555,32 @@ function M.import_pass_config(config)
   return pm:import_config(config)
 end
 
+function M.export_user_config()
+  sync_config_to_passes()
+  local cfg = M.get_config()
+  cfg.version = VERSION
+  cfg.passes = pm:export_config()
+  return cfg
+end
+function M.import_user_config(config)
+  if type(config) ~= "table" then return false, "config must be a table" end
+  if config.preset and PRESETS[config.preset] and not config.passes then
+    apply_preset(config.preset)
+  end
+  M.set_config(config)
+  if type(config.passes) == "table" then
+    pm:import_config(config.passes)
+    for config_key, pass_name in pairs(CONFIG_TO_PASS) do
+      local info = pm:get(pass_name)
+      if info then Config[config_key] = info.enabled and true or false end
+    end
+    Config.preset = "custom"
+  end
+  return true
+end
+
 M.VERSION = VERSION
+M.PRESETS = PRESETS
 
 -- ============================================================
 -- CLI 入口
@@ -455,7 +589,7 @@ local _is_cli = false
 if arg then
   for i = 1, #arg do
     local v = arg[i]
-    if v == "-i" or v == "--input" or v == "--help" or v == "-h" or v == "--demo" then
+    if v == "-i" or v == "--input" or v == "--help" or v == "-h" or v == "--demo" or v == "--export-config" or v == "--import-config" or v == "--preset" then
       _is_cli = true
       break
     end
@@ -487,7 +621,61 @@ if _is_cli then
    elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
     elseif a == "--no-bbsplit" then Config.basic_block_splitting = false
    elseif a == "--vm" then Config.vm_protect = true
-    elseif a == "--demo" then
+    elseif a == "--preset" then
+      i = i + 1
+      local okp, errp = apply_preset(args[i])
+      if not okp then print("ERROR: " .. tostring(errp)); os.exit(1) end
+    elseif a == "--preserve-name" then
+      i = i + 1
+      if args[i] and args[i] ~= "" then
+        Config.name_whitelist[#Config.name_whitelist + 1] = args[i]
+      end
+    elseif a == "--preserve-string" then
+      i = i + 1
+      if args[i] then
+        Config.string_whitelist[#Config.string_whitelist + 1] = args[i]
+      end
+    elseif a == "--export-config" then
+      i = i + 1
+      local outp = args[i] or "obfuscator_config.lua"
+      local snap = M.export_user_config()
+      local function dump(v, indent)
+        indent = indent or 0
+        local sp = string.rep("  ", indent)
+        local t = type(v)
+        if t == "string" then return string.format("%q", v)
+        elseif t == "number" or t == "boolean" then return tostring(v)
+        elseif t == "table" then
+          local parts = {"{\n"}
+          local keys = {}
+          for k in pairs(v) do keys[#keys+1] = k end
+          table.sort(keys, function(x,y) return tostring(x)<tostring(y) end)
+          for _, k in ipairs(keys) do
+            local key
+            if type(k) == "string" and k:match("^[%a_][%w_]*$") then key = k
+            else key = "[" .. dump(k) .. "]" end
+            parts[#parts+1] = sp .. "  " .. key .. " = " .. dump(v[k], indent+1) .. ",\n"
+          end
+          parts[#parts+1] = sp .. "}"
+          return table.concat(parts)
+        else return "nil" end
+      end
+      local body = "return " .. dump(snap) .. "\n"
+      local okw, errw = write_file(outp, body)
+      if not okw then print("ERROR: " .. tostring(errw)); os.exit(1) end
+      print("Wrote config: " .. outp)
+      os.exit(0)
+    elseif a == "--import-config" then
+      i = i + 1
+      local inp = args[i]
+      if not inp then print("ERROR: --import-config needs a file"); os.exit(1) end
+      local chunk, err = loadfile(inp)
+      if not chunk then print("ERROR: " .. tostring(err)); os.exit(1) end
+      local okc, cfg = pcall(chunk)
+      if not okc then print("ERROR: " .. tostring(cfg)); os.exit(1) end
+      local oki, erri = M.import_user_config(cfg)
+      if not oki then print("ERROR: " .. tostring(erri)); os.exit(1) end
+      print("Imported config from " .. inp)    elseif a == "--demo" then
       local code = run_demo()
       local ok, result = pcall(obfuscate, code)
       if ok then print(result) else print("ERROR: " .. tostring(result)); os.exit(1) end

@@ -25,6 +25,35 @@ local random_int = utils.random_int
 local M = {}
 M.pool = {}
 M._seq = 0
+M.whitelist = {} -- exact string values that must remain plaintext
+
+local function normalize_whitelist(wl)
+  local out = {}
+  if type(wl) ~= "table" then return out end
+  for k, v in pairs(wl) do
+    if type(k) == "number" and type(v) == "string" then
+      out[v] = true
+    elseif type(k) == "string" and v then
+      out[k] = true
+    end
+  end
+  return out
+end
+
+function M.set_whitelist(wl)
+  M.whitelist = normalize_whitelist(wl)
+end
+
+function M.clear_whitelist()
+  M.whitelist = {}
+end
+
+local function is_whitelisted_raw(raw)
+  if not raw or raw == "" then return false end
+  if M.whitelist[raw] then return true end
+  return false
+end
+
 
 ------------------------------------------------------------
 -- 32-bit integer helpers (IEEE-754 / Fengari safe)
@@ -384,6 +413,11 @@ local function extract_quoted(code, quote_byte)
       end
       local s = code:sub(q + 1, j - 2)
       if not should_skip_quote(code, q) and not s:find("__SH_", 1, true) then
+        -- Decode escapes for whitelist match against logical string value
+        local logical = M.process_escapes(s)
+        if is_whitelisted_raw(logical) or is_whitelisted_raw(s) then
+          pos = j
+        else
         local hk = make_unique_key(s)
         M.pool[hk] = {
           raw = s,
@@ -393,6 +427,7 @@ local function extract_quoted(code, quote_byte)
         result[#result + 1] = hk
         last = j
         changed = true
+        end
       end
       pos = j
     end
@@ -435,12 +470,16 @@ local function extract_long(code)
         else
           local content = code:sub(cstart, cpos - 1)
           if not content:find("__SH_", 1, true) then
-            local hk = make_unique_key(content)
-            M.pool[hk] = { raw = content, kind = "long", long_eq = eqs }
-            result[#result + 1] = code:sub(last, s - 1)
-            result[#result + 1] = hk
-            last = cpos + #close
-            changed = true
+            if is_whitelisted_raw(content) then
+              -- keep plaintext long string
+            else
+              local hk = make_unique_key(content)
+              M.pool[hk] = { raw = content, kind = "long", long_eq = eqs }
+              result[#result + 1] = code:sub(last, s - 1)
+              result[#result + 1] = hk
+              last = cpos + #close
+              changed = true
+            end
           end
           pos = cpos + #close
         end

@@ -22,9 +22,12 @@ local is_comment = utils.is_comment
 local M = {}
 
 M.name    = "variable_mangling"
-M.title   = "变量名混淆"
-M.version = "1.0.1"
+M.title   = "?????"
+M.version = "1.1.0"
 M.order   = 30
+M.config  = {
+  whitelist = {}, -- names that must not be renamed
+}
 
 -- Lua 保留字和常用全局变量（不能被替换）
 local RESERVED = {}
@@ -242,12 +245,34 @@ local function collect_table_keys(code)
   return keys
 end
 
-function M.apply(code, _ctx)
-  -- 收集需要替换的变量名
+local function normalize_whitelist(wl)
+  local out = {}
+  if type(wl) ~= "table" then return out end
+  for k, v in pairs(wl) do
+    if type(k) == "number" and type(v) == "string" and v ~= "" then
+      out[v] = true
+    elseif type(k) == "string" and k ~= "" and v then
+      out[k] = true
+    end
+  end
+  return out
+end
+
+function M.apply(code, ctx)
+  ctx = ctx or {}
+  local cfg = ctx.config or {}
+  local whitelist = normalize_whitelist(cfg.whitelist)
+
+  -- ??????????
   local table_keys = collect_table_keys(code)
   local var_map, ids = collect_local_vars(code, table_keys)
 
-  -- 生成替换名
+  -- ??????????
+  for name in pairs(whitelist) do
+    var_map[name] = nil
+  end
+
+  -- ?????
   local rename_map = {}
   for name in pairs(var_map) do
     rename_map[name] = "_" .. random_id(6)

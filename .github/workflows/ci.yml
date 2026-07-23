@@ -21,3 +21,5 @@ jobs:
         run: lua5.4 tests/test_full.lua
       - name: String pool regression
         run: lua5.4 tests/test_string_pool_regression.lua
+      - name: P1 presets/whitelist
+        run: lua5.4 tests/test_p1_presets_whitelist.lua
