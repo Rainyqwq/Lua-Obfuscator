@@ -1,4 +1,4 @@
--- ================================================================
+﻿-- ================================================================
 -- passes/init.lua
 -- Pass 加载器
 --
@@ -18,6 +18,7 @@ local M = {}
 -- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
 -- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
 local BUILTIN = {
+  "passes.vm_function",
   "passes.vm_protect",
   "passes.anti_debug",
   "passes.string_encrypt",

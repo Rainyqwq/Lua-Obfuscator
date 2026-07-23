@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -108,7 +108,7 @@ button.danger:hover{background:var(--err);color:#fff}
 <body>
 <header>
   <h1>Lua Obfuscator & VM</h1>
-  <span class="tag">v2.9.0</span>
+  <span class="tag">v2.10.0</span>
   <span style="flex:1"></span>
   <span style="font-size:12px;color:var(--fg2)">集成 Fengari Lua VM · 10 种混淆技术</span>
 </header>
@@ -217,7 +217,7 @@ print("Key: " .. string.format("0x%X", secret_key))</textarea>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
 <!-- Footer -->
-<div class="footer">Lua Obfuscator v2.9.0 · Author: Rainy_qwq · <a href="https://github.com/Rainyqwq/Lua-Obfuscator" target="_blank" style="color:var(--accent)">GitHub</a> · MIT License</div>
+<div class="footer">Lua Obfuscator v2.10.0 · Author: Rainy_qwq · <a href="https://github.com/Rainyqwq/Lua-Obfuscator" target="_blank" style="color:var(--accent)">GitHub</a> · MIT License</div>
 
 <!-- Fengari Lua VM -->
 <script src="lib/fengari-web.js"></script>
@@ -600,7 +600,7 @@ end
     才能还原原始逻辑
 ]]
 
-local VERSION = "2.9.0"
+local VERSION = "2.10.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -3066,6 +3066,7 @@ local M = {}
 -- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
 -- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
 local BUILTIN = {
+  "passes.vm_function",
   "passes.vm_protect",
   "passes.anti_debug",
   "passes.string_encrypt",
@@ -3812,7 +3813,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "2.9.0"
+local VERSION = "2.10.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -6042,6 +6043,586 @@ end
 M._Parser = Parser
 M._Compiler = Compiler
 M._OPC = OPC
+
+------------------------------------------------------------
+-- 函数级VM：生成可调用的VM chunk（返回 function）
+------------------------------------------------------------
+-- opts: nil → 生成 (function() do ... end end)() 形式
+local function 
+
+
+
+generate_function_vm(proto, key)
+  local op_map, name_to_rt = build_op_map()
+  local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
+  local encoded = encode_proto(proto, key, op_map, byte_to_idx)
+
+  local seed = math.random(1000, 9999)
+  local cs = seed
+  for i, v in ipairs(encoded) do cs = (cs + v * (i + seed)) % 65536 end
+  for i, v in ipairs(encoded) do encoded[i] = v ~ key end
+  local data_str = table.concat(encoded, ",")
+  local chars_str = table.concat(char_pool_enc, ",")
+
+  local names_order = {
+    "NOP","LOADK","LOADBOOL","LOADNIL","MOVE","GETGLOBAL","SETGLOBAL",
+    "GETUPVAL","SETUPVAL","GETTABLE","SETTABLE","NEWTABLE",
+    "ADD","SUB","MUL","DIV","IDIV","MOD","POW",
+    "BAND","BOR","BXOR","SHL","SHR",
+    "UNM","BNOT","NOT","LEN","CONCAT",
+    "EQ","LT","LE","JMP","TEST","TESTSET",
+    "CALL","TAILCALL","RETURN","FORPREP","FORLOOP",
+    "TFORPREP","TFORCALL","TFORLOOP","CLOSURE","VARARG","EXTRARG","SETLIST",
+  }
+  local op_locals = {}
+  for _, nm in ipairs(names_order) do
+    op_locals[#op_locals + 1] = string.format("  local OP_%s = %d", nm, name_to_rt[nm] or 0)
+  end
+  local op_locals_str = table.concat(op_locals, "\\n")
+
+  -- IIFE: do ... end end)()
+  -- 内层 do...end 定义 VM 逻辑，return function(...) 返回最终可调用函数
+  local tpl = [=====[
+(function() do
+  local _d = {%s}
+  local _chars = {%s}
+  local _k = %d
+  local _ck = %d
+  local _cs_seed = %d
+  local _cs_expect = %d
+
+  for _i = 1, #_d do _d[_i] = _d[_i] ~ _k end
+
+  local function _dec_str(di, len)
+    local t = {}
+    for i = 1, len do
+      local idx = _d[di]; di = di + 1
+      t[i] = string.char((_chars[idx] or 0) ~ _ck)
+    end
+    return table.concat(t), di
+  end
+
+%s
+
+  local function _decode_proto(di)
+    local np = _d[di]; di = di + 1
+    local ms = _d[di]; di = di + 1
+    local nk = _d[di]; di = di + 1
+    local nc = _d[di]; di = di + 1
+    local consts = {}
+    for _ci = 1, nk do
+      local t = _d[di]; di = di + 1
+      if t == 0 then break end
+      if t == 1 then
+        local sl = _d[di]; di = di + 1
+        local s; s, di = _dec_str(di, sl)
+        consts[#consts + 1] = tonumber(s)
+      elseif t == 2 then
+        local sl = _d[di]; di = di + 1
+        local s; s, di = _dec_str(di, sl)
+        consts[#consts + 1] = s
+      elseif t == 3 then
+        consts[#consts + 1] = _d[di] == 1; di = di + 1
+      elseif t == 4 then
+        local sub, new_di = _decode_proto(di)
+        consts[#consts + 1] = sub
+        di = new_di + 1
+      end
+    end
+    di = di + 1
+    local code = {}
+    for _ii = 1, nc do
+      local op = _d[di]; di = di + 1
+      local a = _d[di]; di = di + 1
+      local b = _d[di]; di = di + 1
+      local c = _d[di]; di = di + 1
+      code[_ii] = {op=op, a=a, b=b, c=c}
+    end
+    return { code=code, constants=consts, numparams=np, maxstack=ms }, di
+  end
+
+  local function _exec_proto(proto, regs, base, nargs, upvals, varargs)
+    _G._pack = function()
+      local t = {}
+      if varargs then for i = 1, #varargs do t[i] = varargs[i] end end
+      return t
+    end
+    local code = proto.code
+    local consts = proto.constants
+    local pc = 1
+    local A, B, C
+
+    local H = {}
+    H[OP_NOP] = function() end
+    H[OP_LOADK] = function() regs[base + A] = consts[B] end
+    H[OP_LOADBOOL] = function()
+      regs[base + A] = B ~= 0
+      if C ~= 0 then pc = pc + 1 end
+    end
+    H[OP_LOADNIL] = function()
+      for i = 0, B do regs[base + A + i] = nil end
+    end
+    H[OP_MOVE] = function() regs[base + A] = regs[base + B] end
+    H[OP_GETGLOBAL] = function() regs[base + A] = _G[consts[B]] end
+    H[OP_SETGLOBAL] = function() _G[consts[B]] = regs[base + A] end
+    H[OP_GETUPVAL] = function()
+      if upvals and upvals[B + 1] then
+        local uv = upvals[B + 1]
+        regs[base + A] = uv[1][uv[2]]
+      end
+    end
+    H[OP_SETUPVAL] = function()
+      if upvals and upvals[B + 1] then
+        local uv = upvals[B + 1]
+        uv[1][uv[2]] = regs[base + A]
+      end
+    end
+    H[OP_GETTABLE] = function()
+      local t = regs[base + B]
+      regs[base + A] = (type(t) == "table") and t[regs[base + C]] or nil
+    end
+    H[OP_SETTABLE] = function()
+      local t = regs[base + A]
+      if type(t) == "table" then t[regs[base + B]] = regs[base + C] end
+    end
+    H[OP_NEWTABLE] = function() regs[base + A] = {} end
+    H[OP_ADD] = function()
+      local l, r = regs[base + B], regs[base + C]
+      regs[base + A] = (type(l) == "number" and type(r) == "number") and (l + r) or (tonumber(l) or 0) + (tonumber(r) or 0)
+    end
+    H[OP_SUB] = function() regs[base + A] = regs[base + B] - regs[base + C] end
+    H[OP_MUL] = function() regs[base + A] = regs[base + B] * regs[base + C] end
+    H[OP_DIV] = function() regs[base + A] = regs[base + B] / regs[base + C] end
+    H[OP_IDIV] = function() regs[base + A] = regs[base + B] // regs[base + C] end
+    H[OP_MOD] = function() regs[base + A] = regs[base + B] %% regs[base + C] end
+    H[OP_POW] = function() regs[base + A] = regs[base + B] ^ regs[base + C] end
+    H[OP_BAND] = function() regs[base + A] = regs[base + B] & regs[base + C] end
+    H[OP_BOR] = function() regs[base + A] = regs[base + B] | regs[base + C] end
+    H[OP_BXOR] = function() regs[base + A] = regs[base + B] ~ regs[base + C] end
+    H[OP_SHL] = function() regs[base + A] = regs[base + B] << regs[base + C] end
+    H[OP_SHR] = function() regs[base + A] = regs[base + B] >> regs[base + C] end
+    H[OP_UNM] = function() regs[base + A] = -regs[base + B] end
+    H[OP_BNOT] = function() regs[base + A] = ~regs[base + B] end
+    H[OP_NOT] = function() regs[base + A] = not regs[base + B] end
+    H[OP_LEN] = function() regs[base + A] = #regs[base + B] end
+    H[OP_CONCAT] = function()
+      local v = regs[base + B]
+      local s = type(v) == "string" and v or tostring(v)
+      for j = B + 1, C do
+        v = regs[base + j]
+        s = s .. (type(v) == "string" and v or tostring(v))
+      end
+      regs[base + A] = s
+    end
+    H[OP_EQ] = function()
+      local eq = (regs[base + B] == regs[base + C])
+      if (eq and A == 0) or (not eq and A == 1) then pc = pc + 1 end
+    end
+    H[OP_LT] = function()
+      local lt = (regs[base + B] < regs[base + C])
+      if (lt and A == 0) or (not lt and A == 1) then pc = pc + 1 end
+    end
+    H[OP_LE] = function()
+      local le = (regs[base + B] <= regs[base + C])
+      if (le and A == 0) or (not le and A == 1) then pc = pc + 1 end
+    end
+    H[OP_JMP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      pc = pc + sBx
+    end
+    H[OP_FORPREP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      regs[base + A] = regs[base + A] - regs[base + A + 2]
+      pc = pc + sBx
+    end
+    H[OP_FORLOOP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      regs[base + A] = regs[base + A] + regs[base + A + 2]
+      local step = regs[base + A + 2]
+      local limit = regs[base + A + 1]
+      local idx = regs[base + A]
+      local cont = ((step > 0) and (idx <= limit)) or ((step <= 0) and (idx >= limit))
+      if cont then regs[base + A + 3] = idx; pc = pc + sBx end
+    end
+    H[OP_TFORLOOP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      if regs[base + A + 3] ~= nil then
+        regs[base + A + 2] = regs[base + A + 3]
+        pc = pc + sBx
+      end
+    end
+    H[OP_TFORPREP] = function()
+      local sBx = B
+      if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      local fn = regs[base + A]
+      local a1 = regs[base + A + 1]
+      local a2 = regs[base + A + 2]
+      local r1, r2, r3 = fn(a1, a2)
+      regs[base + A + 3] = r1
+      regs[base + A + 4] = r2
+      regs[base + A + 5] = r3
+      pc = pc + sBx
+    end
+    H[OP_TFORCALL] = function()
+      local n = C
+      local fn = regs[base + A]
+      local r = {}
+      for i = 1, n do r[i] = regs[base + A + i] end
+      local res = {fn(table.unpack(r))}
+      for i = 1, n do regs[base + A + 2 + i] = res[i] end
+    end
+    H[OP_SETLIST] = function()
+      local t = regs[base + A]
+      if not t then t = {}; regs[base + A] = t end
+      if C == 0 then
+        local n = regs[base + A + 1]
+        for i = 1, n do t[#t + 1] = regs[base + A + 1 + i] end
+      else
+        for i = 1, C do t[#t + 1] = regs[base + A + i] end
+      end
+    end
+    H[OP_CLOSURE] = function()
+      local sub_proto = consts[B]
+      if type(sub_proto) == "table" and sub_proto.code then
+        local captured_upvals = {}
+        if sub_proto.upvalues then
+          for ui, uv_desc in ipairs(sub_proto.upvalues) do
+            captured_upvals[ui] = { regs, base + uv_desc.reg }
+          end
+        end
+        regs[base + A] = function(...)
+          local sub_regs = {}
+          local args = {...}
+          local n = select("#", ...)
+          for ai = 1, sub_proto.numparams do sub_regs[ai - 1] = args[ai] end
+          local vargs = {}
+          for vi = sub_proto.numparams + 1, n do vargs[#vargs + 1] = args[vi] end
+          return _exec_proto(sub_proto, sub_regs, 0, n, captured_upvals, vargs)
+        end
+      end
+    end
+    H[OP_VARARG] = function()
+      if B == 0 then
+        if varargs then
+          for j = 1, #varargs do regs[base + A + j - 1] = varargs[j] end
+          for j = #varargs + 1, proto.maxstack - 1 do regs[base + A + j - 1] = nil end
+        end
+      else
+        for j = 1, B - 1 do
+          regs[base + A + j - 1] = varargs and varargs[j] or nil
+        end
+      end
+    end
+    H[OP_RETURN] = function()
+      if B >= 2 then
+        local results = {}
+        for j = 0, B - 2 do results[j + 1] = regs[base + A + j] end
+        return "RET", results
+      elseif B == 1 then
+        return "RET", {regs[base + A]}
+      else
+        return "RET", {}
+      end
+    end
+    H[OP_CALL] = function()
+      local fn = regs[base + A]
+      if type(fn) == "function" then
+        local nargs = B - 1
+        local results
+        if nargs <= 0 then
+          results = {fn()}
+        elseif nargs == 1 then
+          results = {fn(regs[base + A + 1])}
+        elseif nargs == 2 then
+          results = {fn(regs[base + A + 1], regs[base + A + 2])}
+        elseif nargs == 3 then
+          results = {fn(regs[base + A + 1], regs[base + A + 2], regs[base + A + 3])}
+        else
+          local args = {}
+          for j = 1, nargs do args[j] = regs[base + A + j] end
+          results = {fn(table.unpack(args))}
+        end
+        if C > 0 then
+          for j = 1, C - 1 do regs[base + A + j - 1] = results[j] end
+        else
+          regs[base + A] = results[1]
+        end
+      end
+    end
+    H[OP_TAILCALL] = function()
+      local fn = regs[base + A]
+      if type(fn) == "function" then
+        local nargs = B - 1
+        if nargs <= 0 then return "RET", {fn()}
+        elseif nargs == 1 then return "RET", {fn(regs[base + A + 1])}
+        elseif nargs == 2 then return "RET", {fn(regs[base + A + 1], regs[base + A + 2])}
+        elseif nargs == 3 then return "RET", {fn(regs[base + A + 1], regs[base + A + 2], regs[base + A + 3])}
+        else
+          local args = {}
+          for j = 1, nargs do args[j] = regs[base + A + j] end
+          return "RET", {fn(table.unpack(args))}
+        end
+      end
+    end
+
+    while pc <= #code do
+      local ins = code[pc]
+      local op = ins.op
+      A, B, C = ins.a, ins.b, ins.c
+      pc = pc + 1
+      local h = H[op]
+      if h then
+        local tag, pack = h()
+        if tag == "RET" then
+          return table.unpack(pack or {})
+        end
+      end
+    end
+  end
+
+  local _cs = _cs_seed
+  for _i = 1, #_d do
+    _cs = (_cs + _d[_i] * (_i + _cs_seed)) & 0xFFFF
+  end
+  if _cs ~= _cs_expect then
+    error("integrity check failed")
+  end
+
+  local _main_proto = _decode_proto(1)
+
+  -- 生成可调用函数
+  local _np = _main_proto.numparams or 0
+  local _hv = _main_proto.has_vararg or false
+
+  return function(...)
+    local _args = {...}
+    local _nargs = select("#", ...)
+    local _regs = {}
+    local _vargs = {}
+    for _ai = 1, _np do
+      _regs[_ai - 1] = _args[_ai]
+    end
+    for _vi = _np + 1, _nargs do
+      _vargs[#_vargs + 1] = _args[_vi]
+    end
+    return _exec_proto(_main_proto, _regs, 0, _nargs, nil, _hv and _vargs or nil)
+  end
+end
+end)()
+]=====]
+
+  return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)
+end
+
+--[[
+protect_as_expr(source_code, opts)
+  解析 source_code，提取所有顶层 local 函数，逐一编译为 proto，
+  再生成可调用的 VM chunk（每个函数独立 blob），最后返回替换代码。
+  opts.skip_globals: 不保护涉及全局读写的函数（默认 true）
+  opts.max_functions: 最大保护函数数量（默认 50）
+]]
+
+local function protect_as_expr(source_code, opts)
+  opts = opts or {}
+  local skip_globals = opts.skip_globals ~= false
+  local max_functions = opts.max_functions or 50
+
+  math.randomseed(math.floor(os.time() + os.clock() * 10000))
+  local function random_int(min, max)
+    return math.random(min, max)
+  end
+
+  local parser = Parser.new(source_code)
+  local ast = parser:parse_block()
+
+  -- 收集顶层 local function
+  local func_stmts = {}
+  local other_stmts = {}
+
+  for _, stmt in ipairs(ast.stmts) do
+    if stmt.type == "func_def" and stmt.is_local then
+      func_stmts[#func_stmts + 1] = stmt
+    else
+      other_stmts[#other_stmts + 1] = stmt
+    end
+  end
+
+  if #func_stmts == 0 then return source_code end
+
+  if #func_stmts > max_functions then
+    for i = max_functions + 1, #func_stmts do
+      other_stmts[#other_stmts + 1] = func_stmts[i]
+    end
+    for i = #func_stmts, max_functions + 1, -1 do func_stmts[i] = nil end
+  end
+
+  -- 逐函数生成 VM stub
+  local stubs = {}
+  local vm_decls = {}
+
+  for idx, func_stmt in ipairs(func_stmts) do
+    local name = func_stmt.name
+    local sub = Compiler.new(nil)
+    local named_params = {}
+    for i, param in ipairs(func_stmt.params) do
+      if param ~= "..." then
+        named_params[#named_params + 1] = param
+        sub.var_regs[param] = i - 1
+        sub.reg_count = i
+      end
+    end
+    for _, s in ipairs(func_stmt.body.stmts) do
+      sub:compile_stmt(s)
+    end
+    sub:resolve_gotos()
+    if #sub.code == 0 or sub.code[#sub.code].op ~= OPC.RETURN then
+      sub:emit(OPC.RETURN, 0, 1, 0)
+    end
+    local proto = {
+      code = sub.code,
+      constants = sub.constants,
+      numparams = #named_params,
+      maxstack = sub.reg_count + 1,
+      upvalues = sub.upvalues,
+      has_vararg = (#func_stmt.params > 0 and func_stmt.params[#func_stmt.params] == "..."),
+    }
+    local key = random_int(1, 0xFFFFFF)
+    local vm_chunk = generate_function_vm(proto, key)
+    local stub_name = "__vm_" .. tostring(idx)
+    stubs[name] = stub_name
+    vm_decls[#vm_decls + 1] = "local " .. stub_name .. " = " .. vm_chunk
+  end
+
+  -- 代码生成
+  local function emit_expr(e)
+    if not e then return "nil" end
+    if e.type == "number" then return tostring(e.value)
+    elseif e.type == "string" then
+      local s = e.value:gsub("\\\\", "\\\\\\\\"):gsub('"', '\\\\"'):gsub("\\n", "\\\\n"):gsub("\\t", "\\\\t")
+      return '"' .. s .. '"'
+    elseif e.type == "bool" then return e.value and "true" or "false"
+    elseif e.type == "nil" then return "nil"
+    elseif e.type == "ident" then return e.name
+    elseif e.type == "vararg" then return "..."
+    elseif e.type == "binop" then
+      return "(" .. emit_expr(e.left) .. " " .. e.op .. " " .. emit_expr(e.right) .. ")"
+    elseif e.type == "unop" then
+      return e.op .. emit_expr(e.expr)
+    elseif e.type == "call" then
+      local args = {}
+      for _, a in ipairs(e.args or {}) do args[#args + 1] = emit_expr(a) end
+      return emit_expr(e.func) .. "(" .. table.concat(args, ", ") .. ")"
+    elseif e.type == "table" then
+      local items = {}
+      for _, f in ipairs(e.fields or {}) do
+        if f.key then
+          items[#items + 1] = "[" .. emit_expr(f.key) .. "] = " .. emit_expr(f.value)
+        else
+          items[#items + 1] = emit_expr(f.value)
+        end
+      end
+      return "{ " .. table.concat(items, ", ") .. " }"
+    elseif e.type == "index" then
+      return emit_expr(e.obj) .. "[" .. emit_expr(e.key) .. "]"
+    elseif e.type == "func_def" then
+      local args = {}
+      for _, a in ipairs(e.params or {}) do args[#args + 1] = a end
+      return "function(" .. table.concat(args, ", ") .. ") end"
+    else return "nil" end
+  end
+
+  local function emit_stmt(s, indent)
+    indent = indent or "  "
+    if s.type == "assign" then
+      local lv = {}
+      for _, v in ipairs(s.targets) do lv[#lv + 1] = emit_expr(v) end
+      local rv = {}
+      for _, v in ipairs(s.values) do rv[#rv + 1] = emit_expr(v) end
+      return indent .. table.concat(lv, ", ") .. " = " .. table.concat(rv, ", ")
+    elseif s.type == "local" then
+      local names = {}
+      for _, n in ipairs(s.names or {}) do names[#names + 1] = n end
+      local vals = {}
+      for _, v in ipairs(s.values or {}) do vals[#vals + 1] = emit_expr(v) end
+      if #vals == 0 then
+        return indent .. "local " .. table.concat(names, ", ")
+      else
+        return indent .. "local " .. table.concat(names, ", ") .. " = " .. table.concat(vals, ", ")
+      end
+    elseif s.type == "call" then
+      return indent .. emit_expr(s) .. ";"
+    elseif s.type == "return" then
+      local vals = {}
+      for _, v in ipairs(s.values or {}) do vals[#vals + 1] = emit_expr(v) end
+      return indent .. "return " .. table.concat(vals, ", ")
+    elseif s.type == "if" then
+      local lines = {}
+      lines[#lines + 1] = indent .. "if " .. emit_expr(s.cond) .. " then"
+      for _, st in ipairs(s.then_block or {}) do lines[#lines + 1] = emit_stmt(st, indent .. "  ") end
+      if s.else_block then
+        lines[#lines + 1] = indent .. "else"
+        for _, st in ipairs(s.else_block) do lines[#lines + 1] = emit_stmt(st, indent .. "  ") end
+      end
+      lines[#lines + 1] = indent .. "end"
+      return table.concat(lines, "\\n")
+    elseif s.type == "while" then
+      local lines = {}
+      lines[#lines + 1] = indent .. "while " .. emit_expr(s.cond) .. " do"
+      for _, st in ipairs(s.body or {}) do lines[#lines + 1] = emit_stmt(st, indent .. "  ") end
+      lines[#lines + 1] = indent .. "end"
+      return table.concat(lines, "\\n")
+    elseif s.type == "for_num" then
+      local step = s.step and emit_expr(s.step) or "1"
+      return indent .. "for " .. s.name .. " = " .. emit_expr(s.init) .. ", " .. emit_expr(s.limit) .. ", " .. step .. " do"
+    elseif s.type == "do_block" then
+      local lines = {indent .. "do"}
+      for _, st in ipairs(s.body or {}) do lines[#lines + 1] = emit_stmt(st, indent .. "  ") end
+      lines[#lines + 1] = indent .. "end"
+      return table.concat(lines, "\\n")
+    elseif s.type == "break" then
+      return indent .. "break"
+    elseif s.type == "for_in" then
+      local names = {}
+      for _, n in ipairs(s.names or {}) do names[#names + 1] = n end
+      local iter_str = emit_expr(s.iter_expr)
+      return indent .. "for " .. table.concat(names, ", ") .. " in " .. iter_str .. " do"
+    else
+      return indent .. "-- " .. (s.type or "unknown")
+    end
+  end
+
+  local out_lines = {}
+  for _, decl in ipairs(vm_decls) do
+    out_lines[#out_lines + 1] = decl
+  end
+
+  -- 顶层函数替换为哑实现
+  for _, func_stmt in ipairs(func_stmts) do
+    local name = func_stmt.name
+    local stub = stubs[name]
+    local params_str = table.concat(func_stmt.params, ", ")
+    out_lines[#out_lines + 1] = "local function " .. name .. "(" .. params_str .. ")"
+    out_lines[#out_lines + 1] = "  return " .. stub .. "(" .. params_str .. ")"
+    out_lines[#out_lines + 1] = "end"
+  end
+
+  -- 非函数语句
+  for _, stmt in ipairs(other_stmts) do
+    out_lines[#out_lines + 1] = emit_stmt(stmt, "")
+  end
+
+  return table.concat(out_lines, "\\n")
+end
+
+function M.protect_as_expr(source_code, opts)
+  return protect_as_expr(source_code, opts)
+end
+
+
 return M
 ]=], "@passes/vm.lua")()
   end
@@ -6084,6 +6665,91 @@ end
 
 return M
 ]], "@passes/vm_protect.lua")()
+  end
+  package.preload["passes.vm_function"] = function()
+    return load([[local M={}
+M.name="vm_function";M.title="函数级VM保护";M.description="对指定顶层函数进行VM字节码虚拟化保护";M.version="2.10.0";M.author="Rainy_qwq";M.order=5;M.enabled=false
+
+local function find_function_end(code_lines,func_line)
+  local state=0;local pd=0;local depth=1
+  for li=func_line,#code_lines do
+    local cl=code_lines[li]
+    local j=1
+    while j<=#cl do
+      local c=cl:sub(j,j)
+      if state==0 then
+        if c=="("then state=1;pd=1 end
+      elseif state==1 then
+        if c=="("then pd=pd+1 elseif c==")"then pd=pd-1;if pd==0 then state=2 end end
+      end
+      j=j+1
+    end
+    if state==2 then
+      local i=1
+      while i<=#cl do
+        local ei=cl:find("end",i,true)
+        if not ei then break end
+        local bok=(ei==1)or not cl:sub(ei-1,ei-1):match("[%w_]")
+        local aok=(ei+3>#cl)or not cl:sub(ei+3,ei+3):match("[%w_]")
+        if bok and aok then depth=depth-1;if depth==0 then return li end end
+        i=ei+1
+      end
+      for _ in cl:gmatch("function%s")do depth=depth+1 end
+      for _ in cl:gmatch("for%s")do depth=depth+1 end
+      for _ in cl:gmatch("if%s")do depth=depth+1 end
+      for _ in cl:gmatch("while%s")do depth=depth+1 end
+      for _ in cl:gmatch("repeat%s")do depth=depth+1 end
+    end
+  end
+end
+
+function M.apply(code,ctx)
+  local vm=ctx.vm_module or require("passes.vm")
+  local code_lines={}
+  for line in code:gmatch("[^\\n]*\\n?")do code_lines[#code_lines+1]=line end
+  local annotated={};local i=1
+  while i<=#code_lines do
+    local line=code_lines[i]
+    if line:match("^%s*%-%-%s*@vm")then
+      local j=i+1
+      while j<=#code_lines and code_lines[j]:match("^%s*$")do j=j+1 end
+      local fl=code_lines[j]
+      local name=fl and fl:match("^%s*local%s+function%s+([%w_]+)")
+      if name then
+        local finish=find_function_end(code_lines,j)
+        if finish then annotated[#annotated+1]={start=i,finish=finish,name=name};i=finish+1 else i=i+1 end
+      else i=i+1 end
+    else i=i+1 end
+  end
+  if #annotated==0 then return code end
+  local replacements={}
+  for _,ann in ipairs(annotated)do
+    local fs={};for li=ann.start+1,ann.finish do fs[#fs+1]=code_lines[li]end
+    fs=table.concat(fs,"\\n")
+    local bl={};local inf=false
+    for line in fs:gmatch("[^\\n]*\\n?")do
+      if not inf then if line:match("local%s+function%s+")then inf=true end end
+      if inf then bl[#bl+1]=line end
+    end
+    local bs=table.concat(bl,"\\n")
+    local ok,vmr=pcall(vm.protect_as_expr,bs)
+    if not ok then error("VM函数保护失败 ["..ann.name.."]: "..tostring(vmr))end
+    replacements[#replacements+1]={start=ann.start,finish=ann.finish,new_src=vmr}
+  end
+  local out={};local cur=1
+  table.sort(replacements,function(a,b)return a.start>b.start end)
+  for _,rep in ipairs(replacements)do
+    while cur<rep.start do out[#out+1]=code_lines[cur];cur=cur+1 end
+    cur=rep.finish+1
+    out[#out+1]="-- @vm (protected)"
+    for line in rep.new_src:gmatch("[^\\n]*\\n?")do out[#out+1]=line end
+  end
+  while cur<=#code_lines do out[#out+1]=code_lines[cur];cur=cur+1 end
+  return table.concat(out,"\\n")
+end
+
+return M
+]], "@passes/vm_function.lua")()
   end
   package.preload["passes.string_encrypt"] = function()
     return load([[-- ================================================================
@@ -8234,6 +8900,7 @@ local M = {}
 -- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
 -- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
 local BUILTIN = {
+  "passes.vm_function",
   "passes.vm_protect",
   "passes.anti_debug",
   "passes.string_encrypt",
@@ -8322,7 +8989,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.9.0"
+local VERSION = "2.10.0"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -8352,6 +9019,7 @@ local Config = {
   junk_comments             = true,
   anti_debug                = false,
   call_indirection          = true,
+   vm_function               = false,
   -- P1: protection lists (not pass toggles)
   name_whitelist            = {}, -- identifier names preserved by var_mangle
   string_whitelist          = {}, -- exact string values kept plaintext
@@ -8372,13 +9040,14 @@ local CONFIG_TO_PASS = {
   junk_comments             = "junk_comments",
   anti_debug                = "anti_debug",
   call_indirection          = "call_indirection",
+   vm_function               = "vm_function",
 }
 
 local PASS_KEYS = {
   "vm_protect", "string_encryption", "variable_mangling",
   "instruction_substitution", "constant_encryption", "advanced_fake_cf",
   "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
-  "junk_comments", "anti_debug", "call_indirection",
+   "vm_function", "junk_comments", "anti_debug", "call_indirection",
 }
 
 -- Protection presets: fast / balanced / max
@@ -8389,7 +9058,7 @@ local PRESETS = {
     instruction_substitution = false, constant_encryption = true,
     advanced_fake_cf = false, control_flow_flattening = false,
     bogus_control_flow = false, basic_block_splitting = false,
-    junk_comments = true, call_indirection = false,
+     junk_comments = true, call_indirection = false, vm_function = false,
   },
   balanced = {
     vm_protect = false, anti_debug = false,
@@ -8397,7 +9066,7 @@ local PRESETS = {
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-    junk_comments = true, call_indirection = true,
+     junk_comments = true, call_indirection = true, vm_function = true,
   },
   max = {
     vm_protect = true, anti_debug = true,
@@ -8405,7 +9074,7 @@ local PRESETS = {
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-    junk_comments = true, call_indirection = true,
+     junk_comments = true, call_indirection = true, vm_function = true,
   },
 }
 
@@ -8448,6 +9117,8 @@ local function sync_config_to_passes()
     whitelist = list_to_set(Config.name_whitelist),
   })
   string_pool.set_whitelist(Config.string_whitelist)
+   -- vm_function and vm_protect are mutually exclusive
+   if Config.vm_function then Config.vm_protect = false end
 end
 
 -- ============================================================
@@ -8508,6 +9179,7 @@ local feature_names = {
  { key = "advanced_fake_cf",         name = "虚假控制流增强" },
   { key = "basic_block_splitting",   name = "基本块拆分" },
  { key = "vm_protect",               name = "VM字节码虚拟化" },
+  { key = "vm_function",               name = "函数级VM保护" },
   { key = "anti_debug",               name = "反调试检测" },
   { key = "call_indirection",         name = "调用间接化" },
 }
@@ -8894,6 +9566,7 @@ if _is_cli then
    elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
     elseif a == "--no-bbsplit" then Config.basic_block_splitting = false
    elseif a == "--vm" then Config.vm_protect = true
+     elseif a == "--vm-function" then Config.vm_function = true
     elseif a == "--preset" then
       i = i + 1
       local okp, errp = apply_preset(args[i])
@@ -8980,6 +9653,7 @@ const FEATURES = [
   { id: 'adv_fake',      name: '虚假控制流',   desc: 'AdvFake',    default: true },
   { id: 'junk_comment',  name: '垃圾注释',     desc: 'Junk',       default: true },
   { id: 'vm_protect',    name: 'VM字节码保护', desc: 'VM',         default: false },
+  { id: 'vm_function',    name: '函数级VM保护', desc: 'VMFunc',     default: false },
   { id: 'anti_debug',    name: '反调试检测',   desc: 'AntiDebug',  default: false },
   { id: 'call_indirect', name: '调用间接化',   desc: 'CallIndir',  default: true },
 ];
@@ -8988,9 +9662,9 @@ let config = {};
 FEATURES.forEach(f => config[f.id] = f.default);
 let currentPreset = 'balanced';
 const PRESET_MAP = {
-  fast: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:false,bb_split:false,bcf:false,instr_sub:false,adv_fake:false,junk_comment:true,vm_protect:false,anti_debug:false,call_indirect:false },
-  balanced: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:false,anti_debug:false,call_indirect:true },
-  max: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:true,anti_debug:true,call_indirect:true },
+  fast: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:false,bb_split:false,bcf:false,instr_sub:false,adv_fake:false,junk_comment:true,vm_protect:false,anti_debug:false,call_indirect:false,vm_function:false },
+  balanced: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:false,anti_debug:false,call_indirect:true,vm_function:true },
+  max: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:true,anti_debug:true,call_indirect:true,vm_function:true },
 };
 function parseCsvList(text){ if(!text) return []; return text.split(/[,\n]/).map(s=>s.trim()).filter(Boolean); }
 function getNameWhitelist(){ const el=document.getElementById('name-whitelist'); return parseCsvList(el?el.value:''); }
@@ -9007,6 +9681,8 @@ function buildLuaOpts(){
     advanced_fake_cf: config.adv_fake,
     junk_comments: config.junk_comment,
     vm_protect: config.vm_protect,
+    vm_function: config.vm_function,
+    ...(config.vm_function ? { vm_protect: false } : {}),
     anti_debug: config.anti_debug,
     call_indirection: config.call_indirect,
     name_whitelist: getNameWhitelist(),
@@ -9036,7 +9712,7 @@ function applyPreset(name, opts){
 }
 function markCustomPreset(){ currentPreset = 'custom'; syncPresetRadios(); }
 function exportConfig(){
-  const payload = { version:'2.9.0', preset:currentPreset, features:Object.assign({},config), name_whitelist:getNameWhitelist(), string_whitelist:getStringWhitelist() };
+  const payload = { version:'2.10.0', preset:currentPreset, features:Object.assign({},config), name_whitelist:getNameWhitelist(), string_whitelist:getStringWhitelist() };
   const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='lua-obfuscator-config.json'; a.click(); URL.revokeObjectURL(url);
   setStatus('已导出配置','ok');

@@ -1,4 +1,4 @@
--- ================================================================
+﻿-- ================================================================
 -- build_bundle.lua
 -- 构建脚本：将所有 Pass 模块内联到 obfuscator
 --
@@ -68,6 +68,7 @@ local pass_files = {
   {"passes.string_pool", "passes/string_pool.lua"},
   {"passes.vm", "passes/vm.lua"},
   {"passes.vm_protect", "passes/vm_protect.lua"},
+  {"passes.vm_function", "passes/vm_function.lua"},
   {"passes.string_encrypt", "passes/string_encrypt.lua"},
   {"passes.var_mangle", "passes/var_mangle.lua"},
   {"passes.num_encrypt", "passes/num_encrypt.lua"},

@@ -1,4 +1,4 @@
-#!/usr/bin/env lua
+﻿#!/usr/bin/env lua
 -- ================================================================
 -- obfuscator.lua
 -- Lua 代码混淆器 - 主程序
@@ -49,7 +49,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.9.0"
+local VERSION = "2.10.0"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -79,6 +79,7 @@ local Config = {
   junk_comments             = true,
   anti_debug                = false,
   call_indirection          = true,
+   vm_function               = false,
   -- P1: protection lists (not pass toggles)
   name_whitelist            = {}, -- identifier names preserved by var_mangle
   string_whitelist          = {}, -- exact string values kept plaintext
@@ -99,13 +100,14 @@ local CONFIG_TO_PASS = {
   junk_comments             = "junk_comments",
   anti_debug                = "anti_debug",
   call_indirection          = "call_indirection",
+   vm_function               = "vm_function",
 }
 
 local PASS_KEYS = {
   "vm_protect", "string_encryption", "variable_mangling",
   "instruction_substitution", "constant_encryption", "advanced_fake_cf",
   "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
-  "junk_comments", "anti_debug", "call_indirection",
+   "vm_function", "junk_comments", "anti_debug", "call_indirection",
 }
 
 -- Protection presets: fast / balanced / max
@@ -116,7 +118,7 @@ local PRESETS = {
     instruction_substitution = false, constant_encryption = true,
     advanced_fake_cf = false, control_flow_flattening = false,
     bogus_control_flow = false, basic_block_splitting = false,
-    junk_comments = true, call_indirection = false,
+     junk_comments = true, call_indirection = false, vm_function = false,
   },
   balanced = {
     vm_protect = false, anti_debug = false,
@@ -124,7 +126,7 @@ local PRESETS = {
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-    junk_comments = true, call_indirection = true,
+     junk_comments = true, call_indirection = true, vm_function = true,
   },
   max = {
     vm_protect = true, anti_debug = true,
@@ -132,7 +134,7 @@ local PRESETS = {
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-    junk_comments = true, call_indirection = true,
+     junk_comments = true, call_indirection = true, vm_function = true,
   },
 }
 
@@ -175,6 +177,8 @@ local function sync_config_to_passes()
     whitelist = list_to_set(Config.name_whitelist),
   })
   string_pool.set_whitelist(Config.string_whitelist)
+   -- vm_function and vm_protect are mutually exclusive
+   if Config.vm_function then Config.vm_protect = false end
 end
 
 -- ============================================================
@@ -235,6 +239,7 @@ local feature_names = {
  { key = "advanced_fake_cf",         name = "虚假控制流增强" },
   { key = "basic_block_splitting",   name = "基本块拆分" },
  { key = "vm_protect",               name = "VM字节码虚拟化" },
+  { key = "vm_function",               name = "函数级VM保护" },
   { key = "anti_debug",               name = "反调试检测" },
   { key = "call_indirection",         name = "调用间接化" },
 }
@@ -621,6 +626,7 @@ if _is_cli then
    elseif a == "--no-advbcf" then Config.advanced_fake_cf = false
     elseif a == "--no-bbsplit" then Config.basic_block_splitting = false
    elseif a == "--vm" then Config.vm_protect = true
+     elseif a == "--vm-function" then Config.vm_function = true
     elseif a == "--preset" then
       i = i + 1
       local okp, errp = apply_preset(args[i])
