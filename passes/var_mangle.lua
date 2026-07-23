@@ -22,7 +22,7 @@ local is_comment = utils.is_comment
 local M = {}
 
 M.name    = "variable_mangling"
-M.title   = "?????"
+M.title   = "变量名混淆"
 M.version = "1.1.0"
 M.order   = 30
 M.config  = {
@@ -178,14 +178,14 @@ local function collect_local_vars(code, table_keys)
   return var_map, ids
 end
 
--- ????????????????????????
+-- 收集表键名（避免把表字段键当变量重命名）
 local function collect_table_keys(code)
   local keys = {}
   local i = 1
   local len = #code
   while i <= len do
     local b = code:byte(i)
-    -- ????????
+    -- 跳过字符串占位符
     if b == 34 or b == 39 then
       local q = b; i = i + 1
       while i <= len do
@@ -196,7 +196,7 @@ local function collect_table_keys(code)
     elseif b == 45 and i < len and code:byte(i+1) == 45 then
       local nl = code:find("\n", i+2, true)
       i = nl and (nl+1) or (len+1)
-    -- ??????
+    -- 处理表结构
     elseif b == 123 then
       i = i + 1
       local depth = 1
@@ -228,7 +228,7 @@ local function collect_table_keys(code)
             if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
           end
           local key = code:sub(start, i - 1)
-          -- ?? = ?
+          -- 跳过已扩展的方括号内容 = 结束
           while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
           if code:byte(i) == 61 then
             keys[key] = true
@@ -263,16 +263,16 @@ function M.apply(code, ctx)
   local cfg = ctx.config or {}
   local whitelist = normalize_whitelist(cfg.whitelist)
 
-  -- ??????????
+  -- 收集需要替换的变量名
   local table_keys = collect_table_keys(code)
   local var_map, ids = collect_local_vars(code, table_keys)
 
-  -- ??????????
+  -- 白名单：不参与重命名
   for name in pairs(whitelist) do
     var_map[name] = nil
   end
 
-  -- ?????
+  -- 生成替换名
   local rename_map = {}
   for name in pairs(var_map) do
     rename_map[name] = "_" .. random_id(6)

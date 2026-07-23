@@ -55,16 +55,16 @@ node build_html.js
 
 注入后请 **Ctrl+F5** 强制刷新，避免浏览器缓存旧 bundle。
 
-## P1 ????
+## P1 选项扩展
 
-`obfuscateLua` / Worker ??? Pass ??????
+`obfuscateLua` / Worker 选项除 Pass 开关外支持:
 
 ```javascript
 {
   preset: 'balanced',           // fast | balanced | max | custom
-  name_whitelist: ['keep_me'],  // ??????
-  string_whitelist: ['OK'],     // ????????
+  name_whitelist: ['keep_me'],  // 名称白名单（变量混淆跳过）
+  string_whitelist: ['OK'],     // 字符串白名单（精确保留明文）
 }
 ```
 
-Web UI ???????????????? JSON ??/???
+Web UI 提供预设单选、白名单输入、配置 JSON 导出/导入。

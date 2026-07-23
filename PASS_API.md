@@ -166,8 +166,8 @@ Pass 'vm_protect' (VM字节码虚拟化) 执行失败: 解析错误 at pos 123
 ```
 
 
-## P1 ??
+## P1 配置
 
-- `variable_mangling` config: `whitelist`?set/map of names?
-- ?? Config: `name_whitelist`, `string_whitelist`, `preset`
+- `variable_mangling` config: `whitelist`: set/map of names?
+- 全局 Config: `name_whitelist`, `string_whitelist`, `preset`
 - Bridge: `apply_preset`, `export_user_config`, `import_user_config`
