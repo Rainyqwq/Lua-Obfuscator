@@ -3375,7 +3375,7 @@ local M = {}
 
 M.name    = "variable_mangling"
 M.title   = "变量名混淆"
-M.version = "1.0.0"
+M.version = "1.0.1"
 M.order   = 30
 
 -- Lua 保留字和常用全局变量（不能被替换）
@@ -3551,8 +3551,8 @@ local function collect_table_keys(code)
       local depth = 1
       while i <= len and depth > 0 do
         local cb = code:byte(i)
-        if cb == 123 then depth = depth + 1
-        elseif cb == 125 then depth = depth - 1
+        if cb == 123 then depth = depth + 1; i = i + 1
+        elseif cb == 125 then depth = depth - 1; i = i + 1
         elseif cb == 34 or cb == 39 then
           local q = cb; i = i + 1
           while i <= len do
