@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // build_html.js
 // Sync obfuscator_bundle.lua into index.html's OBFUSCATOR_LUA section
 //
@@ -7,9 +7,7 @@
 // License: MIT
 // ================================================================
 // The Lua bundle is embedded in a JS template literal (backtick string).
-// JS template literals process escape sequences (\n -> newline, \\ -> \),
-// which corrupts Lua source containing backslash escapes in string literals.
-// This script doubles all backslashes so JS produces the correct literal text.
+// Must escape: backslash, backtick, and ${ so the template does not terminate early.
 
 const fs = require('fs');
 const path = require('path');
@@ -31,9 +29,14 @@ if (bundle.charCodeAt(0) === 0xFEFF) bundle = bundle.slice(1);
   }
 }
 
-// Escape backslashes for JS template literal: \ -> \\
-// (backticks and ${ are not present in the bundle, verified at build time)
-const escaped = bundle.replace(/\\/g, '\\\\');
+// Escape for JS template literal:
+// 1) \ -> \\
+// 2) ` -> \`
+// 3) ${ -> \${
+const escaped = bundle
+  .replace(/\\/g, '\\\\')
+  .replace(/`/g, '\\`')
+  .replace(/\$\{/g, '\\${');
 
 // --- Read index.html ---
 let html = fs.readFileSync(htmlPath, 'utf-8');
@@ -48,14 +51,34 @@ if (startPos < 0) {
 
 const contentStart = startPos + startMarker.length;
 
-// Find the closing backtick, skipping over backslash-escaped characters
-let pos = contentStart;
+// Find the closing backtick of THIS template only.
+// Prefer the canonical terminator "`;\nconst FEATURES" / "`;\r\nconst FEATURES"
+// because inner unescaped backticks may exist in stale builds.
 let endPos = -1;
-while (pos < html.length) {
-  if (html[pos] === '\\') { pos += 2; continue; }
-  if (html[pos] === '`') { endPos = pos; break; }
-  pos++;
+const terminators = [
+  '`;\r\nconst FEATURES',
+  '`;\nconst FEATURES',
+  '`;\r\nconst FEATURES =',
+  '`;\nconst FEATURES =',
+];
+for (const t of terminators) {
+  const idx = html.indexOf(t, contentStart);
+  if (idx >= 0) {
+    endPos = idx;
+    break;
+  }
 }
+
+// Fallback: scan with escape awareness (for partially fixed files)
+if (endPos < 0) {
+  let pos = contentStart;
+  while (pos < html.length) {
+    if (html[pos] === '\\') { pos += 2; continue; }
+    if (html[pos] === '`') { endPos = pos; break; }
+    pos++;
+  }
+}
+
 if (endPos < 0) {
   console.error('ERROR: closing backtick for OBFUSCATOR_LUA not found');
   process.exit(1);
@@ -70,4 +93,6 @@ console.log('index.html updated:');
 console.log('  Old content length:', endPos - contentStart, 'chars');
 console.log('  New content length:', escaped.length, 'chars');
 console.log('  Bundle source length:', bundle.length, 'chars');
-console.log('  Backslash escapes added:', (escaped.length - bundle.length));
+console.log('  Backslash/backtick escapes added:', (escaped.length - bundle.length));
+console.log('  Escaped backticks:', (bundle.match(/`/g) || []).length);
+console.log('  Escaped ${:', (bundle.match(/\$\{/g) || []).length);

@@ -13,13 +13,13 @@ local M = {}
 
 M.name    = "header"
 M.title   = "添加代码头"
-M.version = "1.0.0"
+M.version = "1.1.0"
 M.order   = 200
 
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.5
+-- Obfuscated by Lua Obfuscator v2.8
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --

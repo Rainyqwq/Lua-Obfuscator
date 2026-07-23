@@ -23,23 +23,7 @@ if _VERSION then
   end
 end
 
---[[
-  Lua VM Protector v2.1 - 真正的代码虚拟化
-  
-  原理：
-    1. 解析 Lua 源码为 AST（抽象语法树）
-    2. 将 AST 编译为自定义指令集（不兼容标准 Lua 字节码）
-    3. 生成自定义 VM 解释器（纯 Lua 实现）
-    4. 输出 = VM 解释器 + 加密的自定义字节码
-    
-  攻击者必须：
-    1. 理解自定义指令集格式
-    2. 逆向 VM 解释器逻辑
-    3. 反汇编自定义字节码
-    才能还原原始逻辑
-]]
-
-local VERSION = "2.7.0"
+local VERSION = "2.8.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -1185,6 +1169,9 @@ function Compiler:compile_repeat(stmt)
 end
 
 function Compiler:compile_for_num(stmt)
+  -- Numeric for with correct step sign handling (including negative steps).
+  -- Uses FORPREP/FORLOOP layout:
+  --   R[base]=idx, R[base+1]=limit, R[base+2]=step, R[base+3]=external idx
   self.break_jmps[#self.break_jmps + 1] = {}
   local init_r = self:compile_expr(stmt.init)
   local limit_r = self:compile_expr(stmt.limit)
@@ -1193,41 +1180,38 @@ function Compiler:compile_for_num(stmt)
     step_r = self:alloc_reg()
     self:emit(OPC.LOADK, step_r, self:add_const(1), 0)
   end
-  
-  local iter_r = self:alloc_reg()
-  self.var_regs[stmt.name] = iter_r
-  
-  self:emit(OPC.MOVE, iter_r, init_r, 0)
-  self:free_reg(init_r)
-  
-  local loop_pc = #self.code + 1
-  -- Check: if iter > limit, break
-  -- LT with A=1: skip next if NOT (limit < iter)
-  -- If iter <= limit (continue), LT skips JMP, falls through to body
-  -- If iter > limit (done), LT doesn't skip, JMP exits loop
-  self:emit(OPC.LT, 1, limit_r, iter_r)  -- A=1: skip if NOT less
-  local jmp_pc = self:emit_sbx(OPC.JMP, 0, 0)
-  
+
+  local base = self.reg_count
+  self.reg_count = self.reg_count + 4
+  local limit_slot = base + 1
+  local step_slot = base + 2
+  local ext_r = base + 3
+
+  self:emit(OPC.MOVE, base, init_r, 0)
+  self:emit(OPC.MOVE, limit_slot, limit_r, 0)
+  self:emit(OPC.MOVE, step_slot, step_r, 0)
+  self.var_regs[stmt.name] = ext_r
+
+  -- FORPREP: idx = idx - step; jump to FORLOOP
+  local prep_pc = self:emit_sbx(OPC.FORPREP, base, 0)
+  local body_pc = #self.code + 1
   self:compile_block(stmt.body)
-  
-  -- Increment
-  self:emit(OPC.ADD, iter_r, iter_r, step_r)
-  local back_jmp = self:emit_sbx(OPC.JMP, 0, 0)
-  -- Set back jump: target is loop_pc, current is back_jmp
-  -- VM does: pc = pc + 1, then pc = pc + sBx
-  -- So: loop_pc = back_jmp + 1 + sBx  =>  sBx = loop_pc - back_jmp - 1
-  self.code[back_jmp].sBx = loop_pc - back_jmp - 1
-  self.code[back_jmp].b = loop_pc - back_jmp - 1
-  
-  -- Set exit jump: target is instruction after back_jmp
-  self.code[jmp_pc].sBx = #self.code - jmp_pc
-  self.code[jmp_pc].b = #self.code - jmp_pc
-  -- Fix all break JMPs to point past the loop
+  -- FORLOOP: idx = idx + step; if in range, store ext idx and jump back to body
+  local loop_pc = self:emit_sbx(OPC.FORLOOP, base, 0)
+
+  -- FORLOOP back to body: body = loop + 1 + sBx => sBx = body - loop - 1
+  self.code[loop_pc].sBx = body_pc - loop_pc - 1
+  self.code[loop_pc].b = body_pc - loop_pc - 1
+  -- FORPREP to FORLOOP: loop = prep + 1 + sBx => sBx = loop - prep - 1
+  self.code[prep_pc].sBx = loop_pc - prep_pc - 1
+  self.code[prep_pc].b = loop_pc - prep_pc - 1
+
   local breaks = table.remove(self.break_jmps)
   for _, bj in ipairs(breaks) do
     self.code[bj].sBx = #self.code - bj
     self.code[bj].b = #self.code - bj
   end
+  self:free_reg(init_r)
   self:free_reg(limit_r)
   self:free_reg(step_r)
 end
@@ -2043,7 +2027,7 @@ do
       local step = regs[base + A + 2]
       local limit = regs[base + A + 1]
       local idx = regs[base + A]
-      local cont = (step > 0) and (idx <= limit) or (idx >= limit)
+      local cont = ((step > 0) and (idx <= limit)) or ((step <= 0) and (idx >= limit))
       if cont then
         regs[base + A + 3] = idx
         pc = pc + sBx
@@ -2185,7 +2169,14 @@ do
     end
     H[OP_EXTRARG] = function() end
 
+    -- Safety: hard step limit prevents browser hang if bytecode is corrupted
+    local _steps = 0
+    local _max_steps = 5000000
     while pc <= #code do
+      _steps = _steps + 1
+      if _steps > _max_steps then
+        error("VM step limit exceeded (possible infinite loop)")
+      end
       local ins = code[pc]
       local op = ins.op
       A, B, C = ins.a, ins.b, ins.c

@@ -19,8 +19,8 @@ local M = {}
 
 M.name        = "vm_protect"
 M.title       = "VM字节码虚拟化"
-M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行。最强保护，代码完全不可逆。"
-M.version     = "2.1.0"
+M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行"
+M.version     = "2.8.0"
 M.author      = "Rainy_qwq"
 M.order       = 10
 M.enabled     = false  -- 默认关闭，需手动开启

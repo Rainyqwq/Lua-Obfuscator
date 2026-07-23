@@ -1,94 +1,108 @@
-﻿-- passes/call_indirect.lua
--- Function call indirection via call table
+﻿-- ================================================================
+-- passes/call_indirect.lua
+-- Function call indirection via runtime lookup table
+--
+-- Author: Rainy_qwq
+-- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
+-- License: MIT
+-- ================================================================
+-- Only rewrites GLOBAL function calls: 'function foo(...)' (not local).
+-- Call sites become 'CT.foo(...)'. CT uses __index -> _ENV/_G so the
+-- function is resolved at call time (after definition), which keeps
+-- recursion and forward references working.
 
 local M = {}
 
 M.name = "call_indirection"
 M.title = "Function Call Indirection"
-M.version = "1.0.0"
+M.version = "1.2.0"
 M.order = 85
 M.enabled = false
 
-local function gen_id()
-  return "FID_" .. tostring(math.random(100000, 999999))
+local RESERVED = {
+  ["if"] = true, ["then"] = true, ["else"] = true, ["elseif"] = true, ["end"] = true,
+  ["for"] = true, ["while"] = true, ["do"] = true, ["repeat"] = true, ["until"] = true,
+  ["function"] = true, ["local"] = true, ["return"] = true, ["break"] = true, ["goto"] = true,
+  ["in"] = true, ["not"] = true, ["and"] = true, ["or"] = true, ["nil"] = true,
+  ["true"] = true, ["false"] = true,
+  print = true, pairs = true, ipairs = true, next = true,
+  type = true, select = true, unpack = true, tostring = true, tonumber = true,
+  require = true, error = true, assert = true, pcall = true, xpcall = true,
+  load = true, loadfile = true, dofile = true, setmetatable = true,
+  getmetatable = true, rawget = true, rawset = true, rawequal = true,
+  collectgarbage = true, table = true, string = true, math = true, io = true, os = true,
+  debug = true, coroutine = true, package = true, utf8 = true, bit32 = true,
+}
+
+local function gen_name(prefix)
+  return prefix .. tostring(math.random(100000, 999999))
 end
 
-local function collect_funcs(code)
+-- Collect only GLOBAL function definitions (not 'local function')
+local function collect_global_funcs(code)
   local funcs = {}
-  -- Use pattern that matches function at start of line or after newline
-  for name in code:gmatch("function%s+([%w_]+)%s*%(") do
-    funcs[name] = { name = name, type = "global", id = gen_id() }
+  local pos = 1
+  local len = #code
+  while pos <= len do
+    local s, e, name = code:find("function%s+([%a_][%w_]*)%s*%(", pos)
+    if not s then break end
+    -- Check for 'local' immediately before 'function'
+    local before = code:sub(math.max(1, s - 16), s - 1)
+    local is_local = before:match("local%s+$") ~= nil
+    if not is_local and not RESERVED[name] then
+      funcs[name] = true
+    end
+    pos = e + 1
   end
   return funcs
 end
 
-local function build_table(funcs)
-  local tbl = "CT_" .. tostring(math.random(100000, 999999))
-  local disp = "DP_" .. tostring(math.random(100000, 999999))
-
-  local entries = {}
-  for name, info in pairs(funcs) do
-    entries[#entries+1] = string.format("  %s = %s", name, name)
-  end
-
-  local code_str = string.format(
-    "local %s = {\n%s\n}\nlocal %s = {}\n%s.__index = function(_, k) return %s[k] end\nsetmetatable(%s, %s)\n",
-    tbl, table.concat(entries, ",\n"), disp, tbl, tbl, disp, disp
+local function build_prelude(tbl)
+  -- Resolve at call time from the chunk environment, never capture nil early.
+  return string.format(
+    "local %s=setmetatable({},{__index=function(_,k)local e=_ENV or _G;return e[k]end})\n",
+    tbl
   )
+end
 
-  return tbl, disp, code_str
+local function is_definition_line(line)
+  return line:match("^%s*function%s+[%a_][%w_]*%s*%(")
+      or line:match("^%s*local%s+function%s+[%a_][%w_]*%s*%(")
+end
+
+local function is_comment_or_empty(line)
+  local t = line:match("^%s*(.-)%s*$") or ""
+  return t == "" or t:sub(1, 2) == "--"
 end
 
 local function replace_calls(code, funcs, tbl)
-  local result = {}
-
-  local global_funcs = {}
-  for name, info in pairs(funcs) do
-    if info.type == "global" then
-      global_funcs[name] = true
+  local out = {}
+  for line in (code .. "\n"):gmatch("(.-)\n") do
+    if is_definition_line(line) or is_comment_or_empty(line) then
+      out[#out + 1] = line
+    else
+      local new_line = line:gsub("([%.:]?)([%a_][%w_]*)(%s*)%(", function(prefix, name, ws)
+        if prefix == ":" or prefix == "." then
+          return prefix .. name .. ws .. "("
+        end
+        if not funcs[name] or RESERVED[name] then
+          return name .. ws .. "("
+        end
+        return tbl .. "." .. name .. ws .. "("
+      end)
+      out[#out + 1] = new_line
     end
   end
-
-  for line in code:gmatch("[^\n]+") do
-    local new_line = line
-
-    if not line:match("function%s+[%w_]+%s*%(") then
-      for func_name in pairs(global_funcs) do
-        new_line = new_line:gsub(
-          "([%w_]+)%s*%(",
-          function(captured)
-            if captured == func_name then
-              return string.format("%s.%s(", tbl, func_name)
-            end
-            return captured .. "("
-          end
-        )
-      end
-    end
-
-    result[#result+1] = new_line
-  end
-
-  return table.concat(result, "\n")
+  return table.concat(out, "\n")
 end
 
 function M.apply(code, _ctx)
-  local funcs = collect_funcs(code)
+  local funcs = collect_global_funcs(code)
   if not next(funcs) then return code end
 
-  local global_count = 0
-  for _, info in pairs(funcs) do
-    if info.type == "global" then global_count = global_count + 1 end
-  end
-  if global_count == 0 then return code end
-
-  local tbl, disp, tbl_code = build_table(funcs)
-  code = replace_calls(code, funcs, tbl)
-
-  -- Insert call table at beginning of code
-  code = tbl_code .. "\n" .. code
-
-  return code
+  local tbl = gen_name("CT_")
+  local body = replace_calls(code, funcs, tbl)
+  return build_prelude(tbl) .. body
 end
 
 return M

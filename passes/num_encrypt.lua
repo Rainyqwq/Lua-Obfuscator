@@ -1,17 +1,12 @@
 -- ================================================================
 -- passes/num_encrypt.lua
--- 常量数字加密
+-- Constant number encryption (Fengari / Lua 5.3 / 5.4 safe)
 --
 -- Author: Rainy_qwq
 -- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
 -- License: MIT
 -- ================================================================
--- 将数字常量替换为等价的数学运算表达式
---
--- 性能优化：
---   - 用 byte 检查代替字符串模式匹配判断十六进制
---   - 减少 strip_strings_from_line 调用次数
---   - 缓存常用值
+-- Replaces numeric literals with equivalent arithmetic expressions.
 
 local utils = require("passes.utils")
 local random_int = utils.random_int
@@ -22,31 +17,64 @@ local is_comment = utils.is_comment
 local M = {}
 
 M.name    = "constant_encryption"
-M.title   = "常量数字加密"
-M.version = "1.0.0"
+M.title   = "Constant Number Encryption"
+M.version = "1.3.1"
 M.order   = 50
 
--- 预计算常用值
+------------------------------------------------------------
+-- Safe hex formatting (no string.format %X)
+------------------------------------------------------------
+local HEX = "0123456789ABCDEF"
+
+local function to_u32(x)
+  x = tonumber(x)
+  if not x or x ~= x then return 0 end
+  if x == math.huge or x == -math.huge then return 0 end
+  if x >= 0 then x = math.floor(x) else x = math.ceil(x) end
+  x = x % 4294967296
+  if x < 0 then x = x + 4294967296 end
+  local lo = math.floor(x % 65536)
+  local hi = math.floor(x / 65536) % 65536
+  return hi * 65536 + lo
+end
+
+local function to_hex(n)
+  n = to_u32(n)
+  local t = {}
+  for i = 8, 1, -1 do
+    local d = math.floor(n % 16)
+    t[i] = HEX:sub(d + 1, d + 1)
+    n = math.floor(n / 16)
+  end
+  return table.concat(t)
+end
+
+local function hex4(n)
+  n = to_u32(n) % 65536
+  local t = {}
+  for i = 4, 1, -1 do
+    local d = math.floor(n % 16)
+    t[i] = HEX:sub(d + 1, d + 1)
+    n = math.floor(n / 16)
+  end
+  return table.concat(t)
+end
+
+------------------------------------------------------------
+-- Byte helpers
+------------------------------------------------------------
 local BYTE_0 = string.byte("0")
 local BYTE_x = string.byte("x")
 local BYTE_X = string.byte("X")
 local BYTE_DOT = string.byte(".")
 local BYTE_UNDERSCORE = string.byte("_")
 
--- 检查一个字节是否是数字
-local function is_digit(b)
-  return b >= 48 and b <= 57  -- '0' to '9'
-end
-
+local function is_digit(b) return b >= 48 and b <= 57 end
 local function is_id_start(b)
   return (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95
 end
+local function is_id_char(b) return is_id_start(b) or is_digit(b) end
 
-local function is_id_char(b)
-  return is_id_start(b) or is_digit(b)
-end
-
--- 检查是否是十六进制字面量
 local function is_hex(s, pos)
   if pos + 1 > #s then return false end
   local b1 = s:byte(pos)
@@ -54,15 +82,96 @@ local function is_hex(s, pos)
   return b1 == BYTE_0 and (b2 == BYTE_x or b2 == BYTE_X)
 end
 
--- 将数字 n 转换为混淆表达式
-local function encrypt_number(n)
+------------------------------------------------------------
+-- Safe integer conversion (avoids "no integer representation")
+------------------------------------------------------------
+local function to_int(x)
+  x = tonumber(x)
+  if not x or x ~= x then return 0 end
+  if x == math.huge or x == -math.huge then return 0 end
+  if x >= 0 then return math.floor(x) else return math.ceil(x) end
+end
+
+------------------------------------------------------------
+-- Encrypt a single integer (guaranteed integer input)
+-- All bitwise ops use to_u32() clamping to avoid Fengari errors
+------------------------------------------------------------
+local function encrypt_int(n)
   if n == 0 then return "(0x0|0)" end
   if n == 1 then return "(0x1&0x1)" end
   if n == -1 then return "(~0x0)" end
 
-  -- 浮点数
+  local sign = n < 0 and "-" or ""
+  local abs_n = to_int(math.abs(n))
+
+  -- All methods must evaluate to exactly abs_n.
+  -- Forbidden (previously buggy):
+  --   * (x<<k)>>k when high bits fall out of 32-bit
+  --   * hex encoding of sum when sum > 0xFFFFFFFF (to_hex truncates)
+
+  if abs_n <= 0xFFFF then
+    local method = random_int(1, 3)
+    if method == 1 then
+      local a = to_u32(random_int(1, 0xFFFF))
+      local xored = to_u32(a ~ abs_n)
+      return sign .. "(0x" .. hex4(a) .. "~0x" .. hex4(xored) .. ")"
+    elseif method == 2 then
+      -- Keep sum within 16 bits so hex4 never truncates
+      local max_a = 0xFFFF - abs_n
+      if max_a < 1 then
+        local a = to_u32(random_int(1, 0xFFFF))
+        local xored = to_u32(a ~ abs_n)
+        return sign .. "(0x" .. hex4(a) .. "~0x" .. hex4(xored) .. ")"
+      end
+      local a = random_int(1, max_a)
+      local sum = abs_n + a
+      return sign .. "(0x" .. hex4(sum) .. "-0x" .. hex4(a) .. ")"
+    else
+      -- Safe shift only when abs_n << shift still fits in 16 bits
+      local shift = random_int(1, 3)
+      if abs_n < (0x10000 >> shift) then
+        local shifted = abs_n << shift
+        return sign .. "(0x" .. hex4(shifted) .. ">>" .. shift .. ")"
+      else
+        local a = to_u32(random_int(1, 0xFFFF))
+        local xored = to_u32(a ~ abs_n)
+        return sign .. "(0x" .. hex4(a) .. "~0x" .. hex4(xored) .. ")"
+      end
+    end
+  elseif abs_n <= 0xFFFFFFFF then
+    local method = random_int(1, 2)
+    if method == 1 then
+      -- XOR is bit-exact for full 32-bit range
+      local a = to_u32(random_int(1, 0xFFFFFFFF))
+      local xored = to_u32(a ~ abs_n)
+      return sign .. "(0x" .. to_hex(a) .. "~0x" .. to_hex(xored) .. ")"
+    else
+      -- Additive: keep sum within 32-bit so to_hex does not truncate
+      local max_a = 0xFFFFFFFF - abs_n
+      if max_a < 1 then
+        -- abs_n == 0xFFFFFFFF: use XOR only
+        local a = to_u32(random_int(1, 0xFFFFFFFF))
+        local xored = to_u32(a ~ abs_n)
+        return sign .. "(0x" .. to_hex(a) .. "~0x" .. to_hex(xored) .. ")"
+      end
+      local a = to_u32(random_int(1, math.min(max_a, 0xFFFFFF)))
+      local sum = abs_n + a
+      return sign .. "(0x" .. to_hex(sum) .. "-0x" .. to_hex(a) .. ")"
+    end
+  else
+    -- Beyond 32-bit: pure decimal additive (no bitwise / no hex truncation)
+    local a = random_int(1, 0xFFFF)
+    local sum = abs_n + a
+    return sign .. "(" .. tostring(sum) .. "-" .. tostring(a) .. ")"
+  end
+end
+
+------------------------------------------------------------
+-- Encrypt a number (handles int and float)
+------------------------------------------------------------
+local function encrypt_number(n)
+  -- Float
   if n ~= math.floor(n) then
-    -- 科学计数法原样返回，避免破坏 e+/e- 语法
     local s = tostring(n)
     if s:find("e", 1, true) or s:find("E", 1, true) then
       return s
@@ -76,49 +185,31 @@ local function encrypt_number(n)
     else
       local abs_int = math.abs(int_part)
       local sign = int_part < 0 and "-" or ""
-      local a = random_int(1, 0xFFFF)
-      int_enc = string.format("%s(0x%X~0x%X)", sign, a, a ~ abs_int)
-    end
-    return string.format("(%s+%.15g*%d/%d)", int_enc, frac, shift, shift)
-  end
-
-  local abs_n = math.abs(n)
-  local sign = n < 0 and "-" or ""
-  local method = random_int(1, 4)
-
-  if method == 1 then
-    local a = random_int(1, 0xFFFF)
-    return string.format("%s(0x%X~0x%X)", sign, a, a ~ abs_n)
-  elseif method == 2 then
-    local a = random_int(1, 0xFFFF)
-    return string.format("%s(0x%X-0x%X)", sign, abs_n + a, a)
-  elseif method == 3 and abs_n > 1 then
-    local shift = random_int(1, 4)
-    return string.format("%s(0x%X>>%d)", sign, abs_n << shift, shift)
-  else
-    -- 因数分解
-    if abs_n > 2 and abs_n < 10000 then
-      for f = 2, math.min(abs_n - 1, 30) do
-        if abs_n % f == 0 then
-          return string.format("%s(0x%X*0x%X)", sign, f, abs_n // f)
-        end
+      if abs_int <= 0xFFFF then
+        local a = to_u32(random_int(1, 0xFFFF))
+        local xored = to_u32(a ~ abs_int)
+        int_enc = sign .. "(0x" .. hex4(a) .. "~0x" .. hex4(xored) .. ")"
+      else
+        int_enc = encrypt_int(int_part)
       end
     end
-    local a = random_int(1, 0xFFFF)
-    return string.format("%s(0x%X~0x%X)", sign, a, a ~ abs_n)
+    return "(" .. int_enc .. "+" .. tostring(frac) .. "*" .. shift .. "/" .. shift .. ")"
   end
+
+  return encrypt_int(n)
 end
 
+------------------------------------------------------------
+-- Main apply
+------------------------------------------------------------
 function M.apply(code, _ctx)
   local lines = split_lines(code)
   local result = {}
 
   for li, line in ipairs(lines) do
-    -- 跳过空行和注释
     if line == "" or is_comment(line) then
       result[li] = line
     else
-      -- 逐字符扫描，跳过字符串占位符、十六进制和字符串字面量
       local parts = {}
       local pn = 0
       local pos = 1
@@ -127,8 +218,8 @@ function M.apply(code, _ctx)
       while pos <= len do
         local b = line:byte(pos)
 
-        -- 跳过字符串占位符 __STR\d+__
-        if b == 95 and line:sub(pos, pos + 3) == "__ST" then  -- '_'
+        -- Skip __STR\d+__ tokens (from string_pool)
+        if b == 95 and line:sub(pos, pos + 3) == "__ST" then
           local end_pos = line:find("__", pos + 5, true)
           if end_pos then
             pn = pn + 1
@@ -140,12 +231,12 @@ function M.apply(code, _ctx)
             pos = pos + 1
           end
 
-        -- 跳过双引号字符串
-        elseif b == 34 then  -- '"'
+        -- Skip double-quoted strings
+        elseif b == 34 then
           local str_end = pos + 1
           while str_end <= len do
             local sb = line:byte(str_end)
-            if sb == 92 then str_end = str_end + 2  -- '\\' skip escape
+            if sb == 92 then str_end = str_end + 2
             elseif sb == 34 then str_end = str_end + 1; break
             else str_end = str_end + 1 end
           end
@@ -153,8 +244,8 @@ function M.apply(code, _ctx)
           parts[pn] = line:sub(pos, str_end - 1)
           pos = str_end
 
-        -- 跳过单引号字符串
-        elseif b == 39 then  -- "'"
+        -- Skip single-quoted strings
+        elseif b == 39 then
           local str_end = pos + 1
           while str_end <= len do
             local sb = line:byte(str_end)
@@ -166,7 +257,7 @@ function M.apply(code, _ctx)
           parts[pn] = line:sub(pos, str_end - 1)
           pos = str_end
 
-        -- 跳过十六进制 0x...
+        -- Skip hex literals 0x...
         elseif is_hex(line, pos) then
           local hx_end = pos + 2
           while hx_end <= len do
@@ -181,7 +272,7 @@ function M.apply(code, _ctx)
           parts[pn] = line:sub(pos, hx_end - 1)
           pos = hx_end
 
-        -- 数字（包括科学计数法）
+        -- Numbers (including scientific notation)
         elseif is_digit(b) and not (pos > 1 and is_id_char(line:byte(pos - 1))) then
           local num_start = pos
           local num_end = pos
@@ -194,13 +285,12 @@ function M.apply(code, _ctx)
             elseif nb == BYTE_DOT and not has_dot and not has_exp then
               has_dot = true
               num_end = num_end + 1
-            elseif (nb == 101 or nb == 69) and not has_exp then  -- 'e' or 'E'
+            elseif (nb == 101 or nb == 69) and not has_exp then
               has_exp = true
               num_end = num_end + 1
-              -- 指数部分可能有 +/-
               if num_end <= len then
                 local sign = line:byte(num_end)
-                if sign == 43 or sign == 45 then num_end = num_end + 1 end  -- '+' or '-'
+                if sign == 43 or sign == 45 then num_end = num_end + 1 end
               end
             else
               break
@@ -208,7 +298,6 @@ function M.apply(code, _ctx)
           end
           local num_str = line:sub(num_start, num_end - 1)
           local num = tonumber(num_str)
-          -- 跳过科学计数法（1e10, 1.5e-3 等），直接原样保留
           if has_exp then
             pn = pn + 1
             parts[pn] = num_str

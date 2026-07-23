@@ -7,15 +7,7 @@
 -- License: MIT
 -- ================================================================
 -- 基于不透明谓词 (Opaque Predicate) 注入永远不会执行的代码分支
--- 不透明谓词：在编译期就能确定真假的条件表达式，但逆向时难以判断
---
--- 示例：
---   原始: do_something()
---   混淆: if (x*x+x)%2 == 0 then   ← 永远为真（但逆向不知道）
---           do_something()
---         else
---           <垃圾代码>
---         end
+-- 只包装“完整、可独立执行的语句”，避免打断多行表达式 / function 定义
 
 local utils = require("passes.utils")
 local random_id = utils.random_id
@@ -27,11 +19,10 @@ local M = {}
 
 M.name    = "bogus_control_flow"
 M.title   = "BCF虚假控制流"
-M.version = "1.0.0"
+M.version = "1.1.0"
 M.order   = 80
-M.enabled = false  -- 默认禁用，由 Config 控制；修复了 then/else 分支交换 bug
+M.enabled = false
 
--- 生成不透明谓词（永远为真的条件表达式）
 local function generate_opaque_predicate()
   local v = "_v" .. random_id(3)
   local method = random_int(1, 5)
@@ -48,7 +39,6 @@ local function generate_opaque_predicate()
   end
 end
 
--- 生成虚假代码块（看起来有意义但不会执行）
 local function generate_bcf_code()
   local fake_vars = {}
   local count = random_int(2, 5)
@@ -70,45 +60,94 @@ local function generate_bcf_code()
   return table.concat(lines, "\n    ")
 end
 
+-- Balance of brackets / strings on one line (rough completeness check)
+local function is_balanced_line(s)
+  local depth = 0
+  local i, n = 1, #s
+  local in_str, q = false, 0
+  while i <= n do
+    local b = s:byte(i)
+    if in_str then
+      if b == 92 then
+        i = i + 2
+      elseif b == q then
+        in_str = false
+        i = i + 1
+      else
+        i = i + 1
+      end
+    else
+      if b == 34 or b == 39 then
+        in_str = true
+        q = b
+        i = i + 1
+      elseif b == 40 or b == 91 or b == 123 then
+        depth = depth + 1
+        i = i + 1
+      elseif b == 41 or b == 93 or b == 125 then
+        depth = depth - 1
+        if depth < 0 then return false end
+        i = i + 1
+      else
+        i = i + 1
+      end
+    end
+  end
+  return depth == 0 and not in_str
+end
+
+-- Only wrap complete single statements. Incomplete lines (multi-line
+-- calls / anonymous functions / open parentheses) must not be wrapped.
+local function is_safe_statement(trimmed)
+  if trimmed == "" then return false end
+  if trimmed:match("^%-%-") then return false end
+  if trimmed:match("^end%s*$") then return false end
+  if trimmed:match("^else") then return false end
+  if trimmed:match("^elseif") then return false end
+  if trimmed:match("^then%s*$") then return false end
+  if trimmed:match("^do%s*$") then return false end
+  if trimmed:match("^local%s+function") then return false end
+  if trimmed:match("^function") then return false end
+  if trimmed:match("^local%s") then return false end
+  if trimmed:match("^return%s") or trimmed:match("^return$") then return false end
+  if trimmed:match("^break%s*$") then return false end
+  if trimmed:match("^if%s") then return false end
+  if trimmed:match("^for%s") then return false end
+  if trimmed:match("^while%s") then return false end
+  if trimmed:match("^repeat%s*$") then return false end
+  if trimmed:match("then%s*$") then return false end
+  if trimmed:match("do%s*$") then return false end
+  if trimmed:match("^goto%s") then return false end
+  if trimmed:match("^::") then return false end
+  -- never wrap lines that open a function expression / incomplete call
+  if trimmed:find("function%s*%(", 1) and not trimmed:find("%f[%a]end%f[%A]") then
+    return false
+  end
+  if not is_balanced_line(trimmed) then return false end
+  -- trailing operators / open commas often mean multi-line expression
+  if trimmed:match("[,%+%-%*%/%%%^%.&|~<>]=?%s*$") and not trimmed:match("%)%s*$") then
+    return false
+  end
+  return true
+end
+
 function M.apply(code, _ctx)
   local lines = split_lines(code)
   local result = {}
-  local depth = 0
 
   for _, line in ipairs(lines) do
     local trimmed = line:match("^%s*(.-)%s*$") or ""
     local indent = line:match("^(%s*)") or ""
 
-    -- 在可执行语句前注入 BCF（跳过空行、注释、控制流语句）
-    if trimmed ~= "" and
-       not trimmed:match("^%-%-") and
-       not trimmed:match("^end%s*$") and
-       not trimmed:match("^else") and
-       not trimmed:match("^elseif") and
-       not trimmed:match("^then%s*$") and
-       not trimmed:match("^do%s*$") and
-      not trimmed:match("^local%s+function") and
-      not trimmed:match("^function") and
-       not trimmed:match("^local%s") and
-      not trimmed:match("^return%s") and
-       not trimmed:match("^return$") and
-       not trimmed:match("^break%s*$") and
-       -- 跳过控制流语句（if/for/while/repeat 开头或以 then/do 结尾）
-       not trimmed:match("^if%s") and
-       not trimmed:match("^for%s") and
-       not trimmed:match("^while%s") and
-       not trimmed:match("^repeat%s*$") and
-       not trimmed:match("then%s*$") and
-       not trimmed:match("do%s*$") and
-       random_int(1, 4) == 1 then
-
-     local predicate = generate_opaque_predicate()
-     local fake_code = generate_bcf_code()
-     result[#result + 1] = string.format("%sif %s then", indent, predicate)
-     result[#result + 1] = string.format("    %s", trimmed)
+    if is_safe_statement(trimmed) and random_int(1, 4) == 1 then
+      local predicate = generate_opaque_predicate()
+      local fake_code = generate_bcf_code()
+      -- Real branch first (always taken), fake branch never runs.
+      result[#result + 1] = string.format("%sif %s then", indent, predicate)
+      result[#result + 1] = string.format("%s  %s", indent, trimmed)
       result[#result + 1] = string.format("%selse", indent)
-      result[#result + 1] = string.format("    %s", fake_code)
-     result[#result + 1] = string.format("%send", indent)
+      result[#result + 1] = string.format("%s  %s", indent, fake_code)
+      result[#result + 1] = string.format("%send", indent)
     else
       result[#result + 1] = line
     end

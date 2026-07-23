@@ -1,11 +1,11 @@
-﻿-- passes/anti_debug.lua
+-- passes/anti_debug.lua
 -- Anti-debugging detection pass
 
 local M = {}
 
 M.name = "anti_debug"
 M.title = "Anti-Debug Detection"
-M.version = "1.0.0"
+M.version = "1.0.1"
 M.order = 15
 M.enabled = false
 
@@ -19,7 +19,7 @@ function M.apply(code, _ctx)
 
   -- Check timing anomaly
   if math.random() < 0.8 then
-    checks[#checks + 1] = "(function()local s=os.clock()local sum=0;for i=1,100 do sum=sum+i end;if os.clock()-s>0.1 then return true end;return false end)()"
+    checks[#checks + 1] = "(function()local s=os.clock()local sum=0;for i=1,100 do sum=sum+i end;if os.clock()-s>2.0 then return true end;return false end)()"
   end
 
   -- Check JIT status

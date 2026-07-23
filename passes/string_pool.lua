@@ -1,531 +1,492 @@
--- ================================================================
+﻿-- ================================================================
 -- passes/string_pool.lua
--- 增强字符串保护：多密钥 + 密文切片乱序 + 哈希索引 + 多态解码器 + 诱饵
+-- Enhanced string protection (Fengari / Lua 5.3 / 5.4 safe)
 --
 -- Author: Rainy_qwq
 -- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
 -- License: MIT
 -- ================================================================
+-- Pipeline:
+--   extract(code)  -> replace string literals with unique tokens
+--   restore(code)  -> tokens become runtime decrypt IIFEs
+--   restore_raw()  -> tokens become original literals (no encrypt)
 --
--- 增强设计（五层保护）：
--- L1 每字符串独立密钥：通过种子 + PRNG 派生，无外部依赖
--- L2 密文切片乱序：加密后字节切分，Fisher-Yates 乱序存储
--- L3 哈希索引：源码仅保留 8 位内容哈希，不暴露字符串内容
--- L4 多态解码器：5 种解码表达模板，随机选择，控制流混淆
--- L5 诱饵解码：插入永不调用的假 decode 函数，增加逆向成本
+-- Design goals:
+--   1. No bitwise ops / no string.format("%X") (Fengari integer traps)
+--   2. Unique pool keys (no hash collision overwrite)
+--   3. No global math.randomseed pollution
+--   4. Correct round-trip for common Lua string escapes
+--   5. Compact polymorphic decrypt expressions
 --
+
 local utils = require("passes.utils")
 local random_int = utils.random_int
-local random_id = utils.random_id
 
 local M = {}
-
 M.pool = {}
+M._seq = 0
 
 ------------------------------------------------------------
--- 辅助：简单 PRNG（线性同余，种子派生每字符串唯一 key）
+-- 32-bit integer helpers (IEEE-754 / Fengari safe)
 ------------------------------------------------------------
+local TWO16 = 65536
+local TWO32 = 4294967296
+
 local function to_u32(x)
-  x = tonumber(x) or 0
-  x = math.floor(x)
-  x = x % 0x100000000
-  if x < 0 then x = x + 0x100000000 end
-  return x
+  x = tonumber(x)
+  if not x or x ~= x then return 0 end
+  if x == math.huge or x == -math.huge then return 0 end
+  if x >= 0 then
+    x = math.floor(x)
+  else
+    x = math.ceil(x)
+  end
+  x = x % TWO32
+  if x < 0 then x = x + TWO32 end
+  -- Rebuild from 16-bit halves so host never keeps a fractional residue
+  local lo = math.floor(x % TWO16)
+  local hi = math.floor(x / TWO16) % TWO16
+  return hi * TWO16 + lo
+end
+
+local function mul_u32(a, b)
+  a = to_u32(a)
+  b = to_u32(b)
+  local a_lo, a_hi = a % TWO16, math.floor(a / TWO16)
+  local b_lo, b_hi = b % TWO16, math.floor(b / TWO16)
+  local lo = a_lo * b_lo
+  local mid = a_lo * b_hi + a_hi * b_lo
+  return to_u32(lo + (mid % TWO16) * TWO16)
 end
 
 local function xor_u32(a, b)
-  a = to_u32(a)
-  b = to_u32(b)
-  local r = 0
-  local bit = 1
+  a, b = to_u32(a), to_u32(b)
+  local r, bit = 0, 1
   for _ = 1, 32 do
-    local ai = a % 2
-    local bi = b % 2
+    local ai, bi = a % 2, b % 2
     if ai ~= bi then r = r + bit end
     a = math.floor(a / 2)
     b = math.floor(b / 2)
     bit = bit * 2
   end
-  return r
+  return to_u32(r)
 end
 
 local function and_u32(a, b)
-  a = to_u32(a)
-  b = to_u32(b)
-  local r = 0
-  local bit = 1
+  a, b = to_u32(a), to_u32(b)
+  local r, bit = 0, 1
   for _ = 1, 32 do
-    local ai = a % 2
-    local bi = b % 2
+    local ai, bi = a % 2, b % 2
     if ai == 1 and bi == 1 then r = r + bit end
     a = math.floor(a / 2)
     b = math.floor(b / 2)
     bit = bit * 2
   end
-  return r
+  return to_u32(r)
 end
 
-local function xor_byte(v, key)
-  return and_u32(xor_u32(v, key), 0xFF)
+local function xor_byte(v, k)
+  return and_u32(xor_u32(v, k), 255)
 end
 
--- Pure integer PRNG (LCG, works in Lua 5.3/5.4/Fengari without bitwise-op issues)
-local function prng(seed)
-  seed = to_u32(seed * 22695477 + 1)
-  return seed % 0x10000
+-- Local LCG: does NOT touch math.randomseed
+local function lcg_next(state)
+  -- Numerical Recipes LCG constants, 32-bit
+  return to_u32(mul_u32(state, 1664525) + 1013904223)
 end
 
--- 从字符串内容派生稳定 31-bit 种子（使用 32-bit 包装，避免 bitwise 取整问题）
+local function prng16(seed)
+  return lcg_next(to_u32(seed)) % TWO16
+end
+
+-- FNV-1a style 31-bit seed
 local function derive_seed(str)
-  local h = 2166136261
-  local MOD = 0x100000000
-  local MASK = 0x7FFFFFFF
+  local h = to_u32(2166136261)
+  local MASK = 2147483647
   for i = 1, #str do
-    local x = xor_u32(h, str:byte(i))
-    x = (x * 16777619) % MOD
+    local x = xor_u32(h, str:byte(i) or 0)
+    x = mul_u32(x, 16777619)
     h = and_u32(x, MASK)
   end
   return h
 end
 
--- 8 位十六进制哈希（用于源码中的索引键）
-local function str_hash(str)
-  local h = derive_seed(str) & 0xFFFFFFFF
-  return string.format("%08X", h)
+local HEX = "0123456789ABCDEF"
+local function to_hex8(n)
+  n = to_u32(n)
+  local t = {}
+  for i = 8, 1, -1 do
+    local d = math.floor(n % 16)
+    t[i] = HEX:sub(d + 1, d + 1)
+    n = math.floor(n / 16)
+  end
+  return table.concat(t)
 end
 
-------------------------------------------------------------
+-- Fisher-Yates with local LCG (no global RNG side effects)
 local function shuffle(t, seed)
-  math.randomseed(seed)
+  local state = to_u32(seed == 0 and 1 or seed)
   for i = #t, 2, -1 do
-    local j = math.random(1, i)
+    state = lcg_next(state)
+    local j = (state % i) + 1
     t[i], t[j] = t[j], t[i]
   end
 end
 
 ------------------------------------------------------------
--- 辅助：处理 Lua 转义序列
+-- Escape processing (source literal -> raw bytes string)
 ------------------------------------------------------------
 function M.process_escapes(s)
-  local result = {}
+  if not s or s == "" then return s or "" end
+  local out = {}
   local n = 0
   local i = 1
   local len = #s
   while i <= len do
     local c = s:byte(i)
-    if c == 92 and i < len then
+    if c == 92 and i < len then -- backslash
       local nc = s:byte(i + 1)
       n = n + 1
-      if nc == 110 then result[n] = "\n"
-      elseif nc == 116 then result[n] = "\t"
-      elseif nc == 114 then result[n] = "\r"
-      elseif nc == 92 then result[n] = "\\"
-      elseif nc == 34 then result[n] = "\""
-      elseif nc == 39 then result[n] = "\'"
-      elseif nc == 48 then result[n] = "\0"
-      else result[n] = string.char(nc) end
-      i = i + 2
+      if nc == 97 then out[n] = "\a"; i = i + 2          -- \a
+      elseif nc == 98 then out[n] = "\b"; i = i + 2      -- \b
+      elseif nc == 102 then out[n] = "\f"; i = i + 2     -- \f
+      elseif nc == 110 then out[n] = "\n"; i = i + 2     -- \n
+      elseif nc == 114 then out[n] = "\r"; i = i + 2     -- \r
+      elseif nc == 116 then out[n] = "\t"; i = i + 2     -- \t
+      elseif nc == 118 then out[n] = "\v"; i = i + 2     -- \v
+      elseif nc == 92 then out[n] = "\\"; i = i + 2      -- \\
+      elseif nc == 34 then out[n] = "\""; i = i + 2      -- \"
+      elseif nc == 39 then out[n] = "'"; i = i + 2       -- \'
+      elseif nc == 10 then out[n] = "\n"; i = i + 2      -- \<newline> line continue -> newline
+      elseif nc == 13 then                                 -- \r optional \n
+        if i + 2 <= len and s:byte(i + 2) == 10 then
+          out[n] = "\n"; i = i + 3
+        else
+          out[n] = "\n"; i = i + 2
+        end
+      elseif nc == 120 then -- \xHH
+        local h1 = i + 2 <= len and s:sub(i + 2, i + 2) or ""
+        local h2 = i + 3 <= len and s:sub(i + 3, i + 3) or ""
+        if h1:match("[%da-fA-F]") and h2:match("[%da-fA-F]") then
+          out[n] = string.char(tonumber(h1 .. h2, 16) or 0)
+          i = i + 4
+        else
+          out[n] = string.char(nc); i = i + 2
+        end
+      elseif nc >= 48 and nc <= 57 then -- \ddd decimal (up to 3 digits)
+        local j = i + 1
+        local digits = {}
+        while j <= len and #digits < 3 do
+          local b = s:byte(j)
+          if b >= 48 and b <= 57 then
+            digits[#digits + 1] = string.char(b)
+            j = j + 1
+          else
+            break
+          end
+        end
+        local val = tonumber(table.concat(digits), 10) or 0
+        if val > 255 then val = 255 end
+        out[n] = string.char(val)
+        i = j
+      elseif nc == 122 then -- \z skip whitespace
+        i = i + 2
+        n = n - 1 -- cancel the slot; no output char
+        while i <= len do
+          local b = s:byte(i)
+          if b == 32 or b == 9 or b == 10 or b == 13 or b == 12 then
+            i = i + 1
+          else
+            break
+          end
+        end
+      else
+        -- unknown escape: keep the escaped char (Lua behavior for many cases)
+        out[n] = string.char(nc)
+        i = i + 2
+      end
     else
       n = n + 1
-      result[n] = string.char(c)
+      out[n] = string.char(c)
       i = i + 1
     end
   end
-  return table.concat(result)
+  return table.concat(out)
 end
 
 ------------------------------------------------------------
--- L1 + L2 核心加密：切片 + 乱序
--- 返回 {bytes={...}, seed=shuffleSeed, key=key}
+-- Encrypt: XOR + optional slice shuffle
 ------------------------------------------------------------
-local function encrypt_slice(str, seed)
-  -- 派生密钥
-  local key = xor_u32(prng(seed), prng(math.floor(seed / 256)))
-  key = and_u32(key, 0xFF)
+local function encrypt_bytes(str, seed)
+  local key = and_u32(xor_u32(prng16(seed), prng16(math.floor(seed / 256) + 1)), 255)
   if key == 0 then key = 1 end
 
-  -- 派生乱序种子
-  local shuffle_seed = prng(xor_u32(seed, key * 31337))
-
-  -- 加密字节
-  local raw = {}
+  local bytes = {}
+  -- Keystream-ish XOR: key rotates with index (stronger than fixed single-byte)
+  local k = key
   for i = 1, #str do
-    raw[i] = xor_u32(str:byte(i), key)
+    local b = str:byte(i) or 0
+    bytes[i] = xor_byte(b, k)
+    k = and_u32(k + 1 + (i % 7), 255)
+    if k == 0 then k = 1 end
   end
 
-  -- 切片：每 4 字节一片，最后一片可能不足 4
+  -- Pack into 4-byte slices with original positions, then shuffle storage
   local slices = {}
-  local si = 1
-  while si <= #raw do
+  local si, orig = 1, 1
+  while si <= #bytes do
     local slice = {}
     for j = 0, 3 do
-      if si + j <= #raw then
-        slice[j + 1] = raw[si + j]
+      if si + j <= #bytes then
+        slice[#slice + 1] = bytes[si + j]
       end
     end
-    slices[#slices + 1] = slice
+    slices[#slices + 1] = { pos = orig, data = slice }
+    orig = orig + 1
     si = si + 4
   end
 
-  -- Fisher-Yates 乱序
-  shuffle(slices, shuffle_seed)
+  shuffle(slices, xor_u32(seed, key * 31337))
+  return { key = key, slices = slices }
+end
 
-  -- 记录乱序位置（用于解码）
-  local order = {}
-  for i = 1, #slices do order[i] = i end
-  shuffle(order, shuffle_seed + 1)
-
-  -- 转为 {slice, order} 结构（解码器需要重建）
-  local encoded = {}
-  for i = 1, #slices do
-    encoded[i] = { slice = slices[i], pos = order[i] }
-  end
-  -- 按位置排序：encoded[i].pos = i，用于解码时重建原顺序
-  -- 实际上：编码时按乱序存储，解码时按原位置顺序取
-  -- encoded[i].pos = order[i] 意味着第 i 个元素应该在原始的第 order[i] 位
-  -- 我们要的是：encoded[i].pos 是它本应该在的原始位置（1,2,3...）
-  -- 当前 slices 已经乱序了，order 是乱序后的索引映射
-  -- 正确方式：每个 slice 记录它原来在第几位
-  local with_pos = {}
-  for i = 1, #slices do
-    with_pos[i] = { slice = slices[i], orig = order[i] }
-  end
-  -- 按 orig 排序后即为原始顺序
-  table.sort(with_pos, function(a, b) return a.orig < b.orig end)
-
-  -- 重新构建乱序结构：每个 slice 的 orig 不变，但按乱序存储
-  local output = {}
-  for i = 1, #slices do
-    output[i] = with_pos[i]
-  end
-  -- 再 shuffle output 一次（存储顺序）
-  shuffle(output, shuffle_seed + 2)
-
-  return { slices = output, key = key }
+local function make_unique_key(str)
+  M._seq = M._seq + 1
+  -- content hash + monotonic seq => unique even on collisions / identical strings
+  return "__SH_" .. to_hex8(derive_seed(str)) .. "_" .. tostring(M._seq) .. "__"
 end
 
 ------------------------------------------------------------
--- L3 生成哈希索引键
+-- Generate runtime decrypt expression (pure arithmetic XOR)
 ------------------------------------------------------------
-local function make_hash_key(str)
-  return "__SH_" .. str_hash(str) .. "__"
+local function slices_to_lua(slices)
+  local parts = {}
+  for _, s in ipairs(slices) do
+    local elems = { "p=" .. tostring(s.pos or 0) }
+    for _, b in ipairs(s.data or {}) do
+      elems[#elems + 1] = tostring(and_u32(b or 0, 255))
+    end
+    parts[#parts + 1] = "{" .. table.concat(elems, ",") .. "}"
+  end
+  return "{" .. table.concat(parts, ",") .. "}"
+end
+
+-- Shared XOR body (byte-safe, no bitops): inlined into generated code
+-- Reconstructs bytes in order of pos, then applies reverse keystream.
+local function build_decode_expr(enc, style)
+  local key = and_u32(enc.key, 255)
+  local cstr = slices_to_lua(enc.slices)
+  -- Keystream reverse must match encrypt_bytes
+  -- encrypt: k0=key; for i=1..n: out=xor(in,k); k=(k+1+(i%7))%256; if k==0 then k=1
+  -- So for decrypt we rebuild flat ordered bytes first, then run same k sequence.
+
+  if style == 1 then
+    return table.concat({
+      "(function()",
+      "local k=", tostring(key), ";",
+      "local c=", cstr, ";",
+      "table.sort(c,function(a,b)return(a.p or 0)<(b.p or 0)end);",
+      "local f={};",
+      "for _,s in ipairs(c) do for i=1,#s do f[#f+1]=s[i]%256 end end;",
+      "local t={}; local kk=k;",
+      "for i=1,#f do",
+      " local x=f[i]; local y=kk%256; local r=0; local p=1; local xx,yy=x,y;",
+      " for _=1,8 do local xi=xx%2; local yi=yy%2; if xi~=yi then r=r+p end; xx=(xx-xi)/2; yy=(yy-yi)/2; p=p*2 end;",
+      " t[i]=string.char(r);",
+      " kk=(kk+1+(i%7))%256; if kk==0 then kk=1 end;",
+      "end;",
+      "return table.concat(t)",
+      "end)()",
+    })
+  elseif style == 2 then
+    -- same logic, different control-flow shape
+    return table.concat({
+      "(function()",
+      "local K=", tostring(key), ";local C=", cstr, ";",
+      "table.sort(C,function(u,v)return(u.p or 0)<(v.p or 0)end);",
+      "local B,I={},1;",
+      "for _,S in ipairs(C) do for j=1,#S do B[I]=S[j]%256;I=I+1 end end;",
+      "local O,kk={},K;",
+      "for i=1,#B do",
+      " local x,y=B[i],kk%256; local r,p,xx,yy=0,1,x,y;",
+      " for _=1,8 do local xi=xx%2;local yi=yy%2;if xi~=yi then r=r+p end;xx=(xx-xi)/2;yy=(yy-yi)/2;p=p*2 end;",
+      " O[i]=string.char(r); kk=(kk+1+(i%7))%256; if kk==0 then kk=1 end;",
+      "end;return table.concat(O)",
+      "end)()",
+    })
+  else
+    -- reverse accumulate then reverse back (polymorphism)
+    return table.concat({
+      "(function()",
+      "local k=", tostring(key), ";local c=", cstr, ";",
+      "table.sort(c,function(a,b)return(a.p or 0)<(b.p or 0)end);",
+      "local f={}; for _,s in ipairs(c) do for i=1,#s do f[#f+1]=s[i]%256 end end;",
+      "local t,kk={},k;",
+      "for i=1,#f do",
+      " local x,y=f[i],kk%256; local r,p,xx,yy=0,1,x,y;",
+      " for _=1,8 do local xi=xx%2;local yi=yy%2;if xi~=yi then r=r+p end;xx=(xx-xi)/2;yy=(yy-yi)/2;p=p*2 end;",
+      " t[i]=string.char(r); kk=(kk+1+(i%7))%256; if kk==0 then kk=1 end;",
+      "end;",
+      "local o={}; for i=#t,1,-1 do o[#o+1]=t[i] end;",
+      "local p={}; for i=#o,1,-1 do p[#p+1]=o[i] end;",
+      "return table.concat(p)",
+      "end)()",
+    })
+  end
 end
 
 ------------------------------------------------------------
--- L4 多态解码器模板（5 种）
--- 每种模板接收 (key, slices) 返回解码后字符串
+-- Extract string literals
 ------------------------------------------------------------
+local function should_skip_quote(code, q)
+  -- skip length operator #"..." or #'...'
+  if q > 1 and code:byte(q - 1) == 35 then return true end -- #
+  -- skip already-tokenized
+  return false
+end
 
-local function convert_slices(slices)
+local function extract_quoted(code, quote_byte)
+  local quote_char = string.char(quote_byte)
   local result = {}
-  for _, item in ipairs(slices) do
-    local chunk = { pos = item.orig }
-    for i, b in ipairs(item.slice) do
-      chunk[i + 1] = b
+  local pos, last = 1, 1
+  local len = #code
+  local changed = false
+
+  while pos <= len do
+    local q = code:find(quote_char, pos, true)
+    if not q then break end
+
+    -- crude comment skip: if this line has -- before quote and not in prior string... hard.
+    -- Skip line comments: if we see -- before quote on same line without being part of string we started
+    local line_start = (code:sub(1, q):find("\n[^\n]*$") or 0)
+    -- simpler: check for -- between previous newline and q
+    local prev_nl = 0
+    for i = q - 1, 1, -1 do
+      if code:byte(i) == 10 then prev_nl = i; break end
     end
-    result[#result + 1] = chunk
+    local prefix = code:sub(prev_nl + 1, q - 1)
+    local comment_pos = prefix:find("%-%-")
+    if comment_pos then
+      -- treat as not a string; advance past quote char
+      pos = q + 1
+    else
+      local j = q + 1
+      while j <= len do
+        local c = code:byte(j)
+        if c == 92 then
+          j = j + 2 -- skip escape
+        elseif c == quote_byte then
+          j = j + 1
+          break
+        else
+          j = j + 1
+        end
+      end
+      local s = code:sub(q + 1, j - 2)
+      if not should_skip_quote(code, q) and not s:find("__SH_", 1, true) then
+        local hk = make_unique_key(s)
+        M.pool[hk] = {
+          raw = s,
+          kind = (quote_byte == 34) and "double" or "single",
+        }
+        result[#result + 1] = code:sub(last, q - 1)
+        result[#result + 1] = hk
+        last = j
+        changed = true
+      end
+      pos = j
+    end
   end
-  return result
+
+  if changed then
+    result[#result + 1] = code:sub(last)
+    return table.concat(result)
+  end
+  return code
 end
 
+local function extract_long(code)
+  -- support [[...]] and [=[...]=] ... up to a few = signs
+  local result = {}
+  local pos, last = 1, 1
+  local len = #code
+  local changed = false
 
-local DECODER_TEMPLATES = {
-
--- 模板 A：逐片 XOR 反向拼接
-function(key, slices)
-  local r = {}
-  -- 按 orig 位置重建顺序
-  table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      r[#r + 1] = string.char(xor_byte(b, key))
-    end
-  end
-  return table.concat(r)
-end,
-
--- 模板 B：拼接后统一 XOR
-function(key, slices)
-  local flat = {}
-  table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      flat[#flat + 1] = b
-    end
-  end
-  local out = {}
-  for i = 1, #flat do
-    out[i] = string.char(xor_byte(flat[i], key))
-  end
-  return table.concat(out)
-end,
-
--- 模板 C：两段异或合并（演示多态）
-function(key, slices)
-  table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
-  local p1, p2 = 1, 1
-  local h1, h2 = {}, {}
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      if p1 <= #slices // 2 then
-        h1[p1] = b; p1 = p1 + 1
+  while pos <= len do
+    local s = code:find("%[", pos)
+    if not s then break end
+    local eqs = code:match("^%[(=*)%[", s)
+    if not eqs then
+      pos = s + 1
+    else
+      -- check comment --[[
+      local is_comment = false
+      if s > 2 and code:sub(s - 2, s - 1) == "--" then
+        is_comment = true
+      end
+      local close = "]" .. eqs .. "]"
+      local cstart = s + 2 + #eqs
+      local cpos = code:find(close, cstart, true)
+      if not cpos then
+        pos = s + 1
       else
-        h2[p2] = b; p2 = p2 + 1
+        if is_comment then
+          pos = cpos + #close
+        else
+          local content = code:sub(cstart, cpos - 1)
+          if not content:find("__SH_", 1, true) then
+            local hk = make_unique_key(content)
+            M.pool[hk] = { raw = content, kind = "long", long_eq = eqs }
+            result[#result + 1] = code:sub(last, s - 1)
+            result[#result + 1] = hk
+            last = cpos + #close
+            changed = true
+          end
+          pos = cpos + #close
+        end
       end
     end
   end
-  local r = {}
-  for i = 1, #h1 do r[#r + 1] = string.char(xor_byte(h1[i], key)) end
-  for i = 1, #h2 do r[#r + 1] = string.char(xor_byte(h2[i], key)) end
-  return table.concat(r)
-end,
 
--- 模板 D：表拼接 XOR
-function(key, slices)
-  table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
-  local t = {}
-  local idx = 1
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      t[idx] = string.char(xor_byte(b, key)); idx = idx + 1
-    end
+  if changed then
+    result[#result + 1] = code:sub(last)
+    return table.concat(result)
   end
-  return table.concat(t)
-end,
-
--- 模板 E：反转后 XOR
-function(key, slices)
-  table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
-  local flat = {}
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      flat[#flat + 1] = b
-    end
-  end
-  local r = {}
-  for i = #flat, 1, -1 do
-    r[#r + 1] = string.char(xor_byte(flat[i], key))
-  end
-  return table.concat(r)
-end,
-}
-
-------------------------------------------------------------
--- L5 诱饵解码器（永不调用）
-------------------------------------------------------------
-local DECOY_TEMPLATES = {
-
-function(key, slices)
-  -- 错误方式：错误的 key 或顺序，永远得不到正确结果
-  local t = {}
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      t[#t + 1] = string.char(xor_byte(b, key + 1))
-    end
-  end
-  return table.concat(t)
-end,
-
-function(key, slices)
-  -- 错误方式：颠倒顺序
-  table.sort(slices, function(a, b) return (b.orig or 0) < (a.orig or 0) end)
-  local t = {}
-  for _, s in ipairs(slices) do
-    for _, b in ipairs(s.slice or s) do
-      t[#t + 1] = string.char(xor_byte(b, key))
-    end
-  end
-  return table.concat(t)
-end,
-
-function(key, slices)
-  -- 错误方式：漏掉最后一个字节
-  table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
-  local t = {}
-  for si, s in ipairs(slices) do
-    local last = #s.slice
-    for i = 1, last - 1 do
-      t[#t + 1] = string.char(xor_byte(s.slice[i], key))
-    end
-  end
-  return table.concat(t)
-end,
-}
-
-------------------------------------------------------------
--- 生成 Lua 解码表达式（字符串序列化 slices + key）
--- 输出一个可立即执行的 Lua 函数体字符串
-------------------------------------------------------------
-local function build_decode_expr(chunks, key, template_idx)
-  -- 每个块格式: {pos=N, b1, b2, b3, b4}  （pos 1-based，字节可能是 nil）
-  local chunk_strs = {}
-  for _, c in ipairs(chunks) do
-    local elems = {"pos=" .. c.pos}
-    for _, b in ipairs(c) do
-      elems[#elems + 1] = tostring(b or 0)
-    end
-    chunk_strs[#chunk_strs + 1] = "{" .. table.concat(elems, ",") .. "}"
-  end
-  local chunks_lua = "{" .. table.concat(chunk_strs, ",") .. "}"
-  local key_str = tostring(key)
-  return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=c[i].pos;for j=2,5 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=k%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
+  return code
 end
 
-------------------------------------------------------------
--- 生成诱饵解码表达式
-------------------------------------------------------------
-local function build_decoy_expr(chunks, key, decoy_idx)
-  local chunk_strs = {}
-  for _, c in ipairs(chunks) do
-    local elems = {"pos=" .. c.pos}
-    for _, b in ipairs(c) do
-      elems[#elems + 1] = tostring(b or 0)
-    end
-    chunk_strs[#chunk_strs + 1] = "{" .. table.concat(elems, ",") .. "}"
-  end
-  local chunks_lua = "{" .. table.concat(chunk_strs, ",") .. "}"
-  local key_str = tostring(key)
-  if decoy_idx == 1 then
-    -- 错误的 key
-    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=c[i].pos;for j=2,5 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=(k+1)%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
-  elseif decoy_idx == 2 then
-    -- 错误位置（颠倒 pos）
-    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=#c-i+1;for j=2,5 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=k%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
-  else
-    -- 漏掉最后字节
-    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c-1 do local p=c[i].pos;for j=2,4 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=k%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
-  end
-end
-
-------------------------------------------------------------
--- 主流程：extract（收集字符串，替换为哈希键）
-------------------------------------------------------------
 function M.extract(code)
   M.pool = {}
-  local idx = 0
+  M._seq = 0
+  if type(code) ~= "string" or code == "" then return code end
 
-  -- 长字符串 [[...]]
-  code = code:gsub("%[%[(.-)%]%]", function(s)
-    local hk = make_hash_key(s)
-    M.pool[hk] = { raw = s, kind = "long" }
-    idx = idx + 1
-    return hk
-  end)
-
-  -- 双引号字符串
-  local function extract_double(code)
-    local result = {}
-    local pos = 1
-    local len = #code
-    local last = 1
-    while pos <= len do
-      local q = code:find('"', pos, true)
-      if not q then break end
-      local j = q + 1
-      while j <= len do
-        local c = code:byte(j)
-        if c == 92 then j = j + 2
-        elseif c == 34 then j = j + 1; break
-        else j = j + 1 end
-      end
-      local s = code:sub(q + 1, j - 2)
-      -- 跳过 # 后面的字符串（如 #"xxx" 是长度操作，不是字符串）
-      if not s:find("__SH_") and not (q > 1 and code:byte(q - 1) == 35) then
-        local hk = make_hash_key(s)
-        M.pool[hk] = { raw = s, kind = "double" }
-        result[#result + 1] = code:sub(last, q - 1)
-        result[#result + 1] = hk
-        last = j
-        idx = idx + 1
-      end
-      pos = j
-    end
-    if #result > 0 then
-      result[#result + 1] = code:sub(last)
-      return table.concat(result)
-    end
-    return code
-  end
-  code = extract_double(code)
-
-  -- 单引号字符串
-  local function extract_single(code)
-    local result = {}
-    local pos = 1
-    local len = #code
-    local last = 1
-    while pos <= len do
-      local q = code:find("'", pos, true)
-      if not q then break end
-      local j = q + 1
-      while j <= len do
-        local c = code:byte(j)
-        if c == 92 then j = j + 2
-        elseif c == 39 then j = j + 1; break
-        else j = j + 1 end
-      end
-      local s = code:sub(q + 1, j - 2)
-      -- 跳过 # 后面的字符串
-      if not s:find("__SH_") and not (q > 1 and code:byte(q - 1) == 35) then
-        local hk = make_hash_key(s)
-        M.pool[hk] = { raw = s, kind = "single" }
-        result[#result + 1] = code:sub(last, q - 1)
-        result[#result + 1] = hk
-        last = j
-        idx = idx + 1
-      end
-      pos = j
-    end
-    if #result > 0 then
-      result[#result + 1] = code:sub(last)
-      return table.concat(result)
-    end
-    return code
-  end
-  code = extract_single(code)
-
+  -- long strings first (so quotes inside [[ ]] are not touched)
+  code = extract_long(code)
+  code = extract_quoted(code, 34) -- "
+  code = extract_quoted(code, 39) -- '
   return code
 end
 
 ------------------------------------------------------------
--- 主流程：restore（替换为加密后的解码表达式）
+-- Restore
 ------------------------------------------------------------
 function M.restore(code)
-  if not next(M.pool) then return code end
+  if type(code) ~= "string" or not next(M.pool) then return code end
 
-  -- 对每个哈希键生成加密表达式
   local replacements = {}
-  local decoy_keys = {}  -- 诱饵：永不调用的假键
-
-  local pool_keys = {}
-  for k in pairs(M.pool) do pool_keys[#pool_keys + 1] = k end
-
-  for _, hk in ipairs(pool_keys) do
-    local info = M.pool[hk]
-    local raw_str = M.process_escapes(info.raw)
-    local seed = derive_seed(raw_str)
-
-    -- 加密：切片 + 乱序
-    local enc = encrypt_slice(raw_str, seed)
-
-    -- 选择解码模板（1-5）
-    local template_idx = random_int(1, #DECODER_TEMPLATES)
-
-    -- 生成解码表达式
-    replacements[hk] = build_decode_expr(convert_slices(enc.slices), enc.key, template_idx)
-
-    -- 随机生成 0-1 个诱饵键
-    if math.random() < 0.3 and #pool_keys > 2 then
-      -- 随机选一个真实键作为假目标（永不插入代码）
-      local decoy_idx = random_int(1, #DECOY_TEMPLATES)
-      -- 生成一个假哈希键（不存在于 pool 中）
-      local fake_hk = "__SH_" .. string.format("%08X", random_int(0, 0xFFFFFFFF)) .. "__"
-      -- 诱饵：用同一份加密数据，但用错误模板
-      decoy_keys[fake_hk] = build_decoy_expr(convert_slices(enc.slices), enc.key, decoy_idx)
-    end
+  for hk, info in pairs(M.pool) do
+    local raw_str = info.kind == "long" and (info.raw or "") or M.process_escapes(info.raw or "")
+    local seed = derive_seed(raw_str .. "\0" .. hk) -- include key for uniqueness
+    local enc = encrypt_bytes(raw_str, seed)
+    local style = random_int(1, 3)
+    replacements[hk] = build_decode_expr(enc, style)
   end
 
-  -- 替换所有哈希键（__SH_XXXXXXXX__）
+  -- tokens look like __SH_XXXXXXXX_123__
+  code = code:gsub("__SH_[0-9A-Fa-f]+_%d+__", function(k)
+    return replacements[k] or k
+  end)
+  -- backward-compat older token form without seq
   code = code:gsub("__SH_[0-9A-Fa-f]+__", function(k)
     return replacements[k] or k
   end)
@@ -533,17 +494,22 @@ function M.restore(code)
   return code
 end
 
--- 不加密版本（用于 VM 模式等不需要加密的场景）
 function M.restore_raw(code)
-  if not next(M.pool) then return code end
+  if type(code) ~= "string" or not next(M.pool) then return code end
 
-  code = code:gsub("__SH_[0-9A-Fa-f]+__", function(k)
+  local function restore_one(k)
     local info = M.pool[k]
     if not info then return k end
-    local q = info.kind == "double" and '"' or "'"
-    return q .. info.raw .. q
-  end)
+    if info.kind == "long" then
+      local eq = info.long_eq or ""
+      return "[" .. eq .. "[" .. (info.raw or "") .. "]" .. eq .. "]"
+    end
+    local q = info.kind == "single" and "'" or '"'
+    return q .. (info.raw or "") .. q
+  end
 
+  code = code:gsub("__SH_[0-9A-Fa-f]+_%d+__", restore_one)
+  code = code:gsub("__SH_[0-9A-Fa-f]+__", restore_one)
   return code
 end
 

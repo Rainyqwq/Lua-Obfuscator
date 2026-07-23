@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env lua
+#!/usr/bin/env lua
 -- ================================================================
 -- obfuscator.lua
 -- Lua 代码混淆器 - 主程序
@@ -49,7 +49,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.9.0"
+local VERSION = "2.8.0"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -114,14 +114,10 @@ local function obfuscate(code, vm_module)
   local vm_pass = pm:get("vm_protect")
   local do_vm = vm_pass and vm_pass.enabled
 
-  -- VM 保护生成的字节码解释器是结构化代码，文本类 Pass 会破坏其语义
-  -- 指令替换、控制流平坦化、BCF 虚假控制流与 VM 输出不兼容，自动禁用
-  if do_vm then
-    pm:set_enabled("instruction_substitution", false)
-    pm:set_enabled("control_flow_flattening", false)
-   pm:set_enabled("bogus_control_flow", false)
-    pm:set_enabled("basic_block_splitting", false)
- end
+  -- Passes are expected to be independently correct.
+  -- Do not silently disable user-selected passes for "compatibility".
+  -- Structural passes may still rewrite VM output; that is a pass-quality
+  -- issue and should be fixed in the pass itself (see bcf/bb_split/etc).
 
   -- 字符串提取（VM保护时跳过，VM自己处理字符串）
   if not do_vm then

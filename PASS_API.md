@@ -77,24 +77,28 @@ local result, log = pm:run(code, {
   end,
 })
 
--- log: &#123;&#123;name, title, elapsed, input_size, output_size&#125;, ...}
+-- log: { {name, title, elapsed, input_size, output_size}, ... }
 ```
 
-## 内置 Pass 列表
+## 内置 Pass（v2.8.0）
 
 | order | name | title | 默认 | 说明 |
 |-------|------|-------|------|------|
-| 10 | `vm_protect` | VM 字节码虚拟化 | ❌ | 最强保护，需手动开启 |
-| 20 | `string_encryption` | 字符串加密 | ✅ | 字面量→运行时解密 |
-| 30 | `variable_mangling` | 变量名混淆 | ✅ | 局部变量→随机标识符 |
-| 40 | `instruction_substitution` | 指令替换 | ❌ | 不稳定 |
-| 50 | `constant_encryption` | 常量数字加密 | ✅ | 数字→数学表达式 |
-| 65 | `advanced_fake_cf` | 虚假控制流增强 | ✅ | 注入不可达分支 |
-| 70 | `control_flow_flattening` | 控制流平坦化 | ❌ | 不稳定 |
-| 80 | `bogus_control_flow` | BCF 虚假控制流 | ❌ | 不稳定 |
-| 90 | `basic_block_splitting` | 基本块拆分 | ❌ | goto/label 拆分函数体，不稳定 |
-| 100 | `junk_comments` | 垃圾注释注入 | ✅ | 插入无意义注释 |
-| 200 | `header` | 代码头部 | ✅ | 版本标识 |
+| 10 | `vm_protect` | VM 字节码虚拟化 | ❌ | 自定义字节码 + 解释器 |
+| 15 | `anti_debug` | 反调试检测 | ❌ | hook / 计时 / JIT |
+| 20 | `string_encryption` | 字符串加密 | ✅ | 分层字符串池 |
+| 30 | `variable_mangling` | 变量名混淆 | ✅ | 局部变量随机化 |
+| 40 | `instruction_substitution` | 指令替换 | ❌ | 原子表达式等价替换 |
+| 50 | `constant_encryption` | 常量数字加密 | ✅ | Fengari 安全编码 |
+| 65 | `advanced_fake_cf` | 虚假控制流增强 | ✅ | 不可达复杂分支 |
+| 70 | `control_flow_flattening` | 控制流平坦化 | ❌ | dispatcher 重组 |
+| 80 | `bogus_control_flow` | BCF 虚假控制流 | ❌ | 仅包装完整语句 |
+| 85 | `call_indirection` | 调用间接化 | ❌ | 全局调用经分发表 |
+| 90 | `basic_block_splitting` | 基本块拆分 | ✅ | goto/label 拆分 |
+| 100 | `junk_comments` | 垃圾注释注入 | ✅ | 噪音注释 |
+| 200 | `header` | 代码头部 | ✅ | 版本与警告头 |
+
+Pass **不会**因启用 VM 而被流水线静默禁用。
 
 ## 执行顺序
 
