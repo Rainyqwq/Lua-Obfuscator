@@ -3244,7 +3244,7 @@ local function derive_seed(str)
   for i = 1, #str do
     local x = h ~ str:byte(i)
     x = x * 16777619
-    if x >= MOD then x = x % MOD end
+    if x >= 0x200000000 then x = x % 0x200000000 end
     h = x & MASK
   end
   return h
