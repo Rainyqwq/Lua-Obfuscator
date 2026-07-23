@@ -204,6 +204,9 @@ function PassManager:run(code, opts)
   opts = opts or {}
   local vm_module = opts.vm_module
   local on_pass = opts.on_pass
+  -- Optional total pipeline budget (ms). Prevents runaway passes hanging hosts.
+  local max_total_ms = tonumber(opts.max_total_ms or opts.timeout_ms)
+  local pipeline_t0 = (os.clock and os.clock()) or 0
   local log = {}
 
   -- 构建共享上下文
@@ -249,6 +252,12 @@ function PassManager:run(code, opts)
         on_pass(def.name, def.title, idx, total)
       end
 
+      if max_total_ms and os.clock then
+        local elapsed_ms = (os.clock() - pipeline_t0) * 1000
+        if elapsed_ms > max_total_ms then
+          error(string.format("pipeline timeout: exceeded %.0fms (at pass '%s')", max_total_ms, def.name))
+        end
+      end
       local input_size = #code
       local t0 = clock and clock() or 0
 
@@ -1041,7 +1050,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "2.8.1"
+local VERSION = "2.8.2"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -3297,7 +3306,7 @@ local M = {}
 M.name        = "vm_protect"
 M.title       = "VM字节码虚拟化"
 M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行"
-M.version     = "2.8.1"
+M.version     = "2.8.2"
 M.author      = "Rainy_qwq"
 M.order       = 10
 M.enabled     = false  -- 默认关闭，需手动开启
@@ -5228,7 +5237,7 @@ M.order   = 200
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.8.1
+-- Obfuscated by Lua Obfuscator v2.8.2
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --
@@ -5526,7 +5535,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.8.1"
+local VERSION = "2.8.2"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -5604,6 +5613,7 @@ local function obfuscate(code, vm_module)
   -- 执行 Pass Pipeline
   local ok, result, log = pcall(pm.run, pm, code, {
     vm_module = vm_module,
+    max_total_ms = 120000,
   })
 
   if not ok then

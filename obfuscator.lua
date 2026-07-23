@@ -49,7 +49,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.8.1"
+local VERSION = "2.8.2"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -127,6 +127,7 @@ local function obfuscate(code, vm_module)
   -- 执行 Pass Pipeline
   local ok, result, log = pcall(pm.run, pm, code, {
     vm_module = vm_module,
+    max_total_ms = 120000,
   })
 
   if not ok then

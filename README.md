@@ -2,7 +2,7 @@
 
 Lua 代码混淆工具，支持多种混淆技术和 VM 字节码虚拟化保护。
 
-**当前版本：v2.8.1**
+**当前版本：v2.8.2**
 
 ## 功能概览
 
@@ -74,7 +74,8 @@ node build_html.js
 ## 测试
 
 ```bash
-lua tests/test_full.lua    # 119 项语言特性
+lua tests/test_p0_regression.lua  # P0: 单Pass/组合/语义对拍/防挂死
+lua tests/test_full.lua           # 119 项语言特性
 lua tests/test_85.lua      # 核心功能
 ```
 

@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.4
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+      - name: P0 regression
+        run: lua5.4 tests/test_p0_regression.lua
+      - name: Language suite
+        run: lua5.4 tests/test_full.lua
+      - name: String pool regression
+        run: lua5.4 tests/test_string_pool_regression.lua

@@ -201,6 +201,9 @@ function PassManager:run(code, opts)
   opts = opts or {}
   local vm_module = opts.vm_module
   local on_pass = opts.on_pass
+  -- Optional total pipeline budget (ms). Prevents runaway passes hanging hosts.
+  local max_total_ms = tonumber(opts.max_total_ms or opts.timeout_ms)
+  local pipeline_t0 = (os.clock and os.clock()) or 0
   local log = {}
 
   -- 构建共享上下文
@@ -246,6 +249,12 @@ function PassManager:run(code, opts)
         on_pass(def.name, def.title, idx, total)
       end
 
+      if max_total_ms and os.clock then
+        local elapsed_ms = (os.clock() - pipeline_t0) * 1000
+        if elapsed_ms > max_total_ms then
+          error(string.format("pipeline timeout: exceeded %.0fms (at pass '%s')", max_total_ms, def.name))
+        end
+      end
       local input_size = #code
       local t0 = clock and clock() or 0
 

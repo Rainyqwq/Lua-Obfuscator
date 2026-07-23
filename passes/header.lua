@@ -19,7 +19,7 @@ M.order   = 200
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.8.1
+-- Obfuscated by Lua Obfuscator v2.8.2
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --

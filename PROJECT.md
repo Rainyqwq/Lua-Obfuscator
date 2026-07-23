@@ -73,3 +73,7 @@ node build_html.js     # 注入 index.html 的 OBFUSCATOR_LUA
 ## License
 
 MIT · Rainy_qwq
+
+## Pipeline 超时
+
+`PassManager:run(code, { max_total_ms = N })` 可限制整条流水线总耗时。主程序默认 `120000` ms。Web 异步混淆超时 90 秒。
