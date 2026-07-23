@@ -26,31 +26,24 @@ M.pool = {}
 -- 辅助：简单 PRNG（线性同余，种子派生每字符串唯一 key）
 ------------------------------------------------------------
 -- 32-bit multiply (safe under float64 / Fengari; avoids "no integer representation")
-local function imul32(a, b)
-  a = a & 0xFFFFFFFF
-  b = b & 0xFFFFFFFF
-  local ah, al = (a >> 16) & 0xFFFF, a & 0xFFFF
-  local bh, bl = (b >> 16) & 0xFFFF, b & 0xFFFF
-  local lo = (al * bl) & 0xFFFFFFFF
-  local mid = ((ah * bl) + (al * bh)) & 0xFFFF
-  return (lo + (mid << 16)) & 0xFFFFFFFF
-end
-
+-- Pure integer PRNG (LCG, works in both Lua 5.3 and Fengari)
 local function prng(seed)
-  seed = seed & 0xFFFFFFFF
-  seed = imul32(seed ~ (seed >> 16), 0x45d9f3b)
-  seed = imul32(seed ~ (seed >> 16), 0x45d9f3b)
-  seed = seed ~ (seed >> 16)
-  return seed & 0xFFFF
+  seed = (seed * 22695477 + 1) & 0xFFFF
+  return seed
 end
 
--- 从字符串内容派生稳定 31-bit 种子（FNV-1a, 32-bit）
+-- 从字符串内容派生稳定 31-bit 种子（每步都 & 0x7FFFFFFF 保持整数范围）
 local function derive_seed(str)
   local h = 2166136261
+  local MOD = 0x80000000
+  local MASK = 0x7FFFFFFF
   for i = 1, #str do
-    h = imul32(h ~ str:byte(i), 16777619)
+    local x = h ~ str:byte(i)
+    x = x * 16777619
+    if x >= MOD then x = x % MOD end
+    h = x & MASK
   end
-  return h & 0x7FFFFFFF
+  return h
 end
 
 -- 8 位十六进制哈希（用于源码中的索引键）

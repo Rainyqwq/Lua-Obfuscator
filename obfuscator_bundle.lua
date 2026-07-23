@@ -535,8 +535,13 @@ end
 -- 从字符串内容派生稳定 31-bit 种子（每步都 & 0x7FFFFFFF 保持整数范围）
 local function derive_seed(str)
   local h = 2166136261
+  local MOD = 0x80000000
+  local MASK = 0x7FFFFFFF
   for i = 1, #str do
-    h = ((h ~ str:byte(i)) * 16777619) & 0x7FFFFFFF
+    local x = h ~ str:byte(i)
+    x = x * 16777619
+    if x >= MOD then x = x % MOD end
+    h = x & MASK
   end
   return h
 end
