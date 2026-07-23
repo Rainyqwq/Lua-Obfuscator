@@ -525,23 +525,65 @@ M.pool = {}
 ------------------------------------------------------------
 -- 辅助：简单 PRNG（线性同余，种子派生每字符串唯一 key）
 ------------------------------------------------------------
--- 32-bit multiply (safe under float64 / Fengari; avoids "no integer representation")
--- Pure integer PRNG (LCG, works in both Lua 5.3 and Fengari)
-local function prng(seed)
-  seed = (seed * 22695477 + 1) & 0xFFFF
-  return seed
+local function to_u32(x)
+  x = tonumber(x) or 0
+  x = math.floor(x)
+  x = x % 0x100000000
+  if x < 0 then x = x + 0x100000000 end
+  return x
 end
 
--- 从字符串内容派生稳定 31-bit 种子（每步都 & 0x7FFFFFFF 保持整数范围）
+local function xor_u32(a, b)
+  a = to_u32(a)
+  b = to_u32(b)
+  local r = 0
+  local bit = 1
+  for _ = 1, 32 do
+    local ai = a % 2
+    local bi = b % 2
+    if ai ~= bi then r = r + bit end
+    a = math.floor(a / 2)
+    b = math.floor(b / 2)
+    bit = bit * 2
+  end
+  return r
+end
+
+local function and_u32(a, b)
+  a = to_u32(a)
+  b = to_u32(b)
+  local r = 0
+  local bit = 1
+  for _ = 1, 32 do
+    local ai = a % 2
+    local bi = b % 2
+    if ai == 1 and bi == 1 then r = r + bit end
+    a = math.floor(a / 2)
+    b = math.floor(b / 2)
+    bit = bit * 2
+  end
+  return r
+end
+
+local function xor_byte(v, key)
+  return and_u32(xor_u32(v, key), 0xFF)
+end
+
+-- Pure integer PRNG (LCG, works in Lua 5.3/5.4/Fengari without bitwise-op issues)
+local function prng(seed)
+  seed = to_u32(seed * 22695477 + 1)
+  return seed % 0x10000
+end
+
+-- 从字符串内容派生稳定 31-bit 种子（使用 32-bit 包装，避免 bitwise 取整问题）
 local function derive_seed(str)
   local h = 2166136261
-  local MOD = 0x80000000
+  local MOD = 0x100000000
   local MASK = 0x7FFFFFFF
   for i = 1, #str do
-    local x = h ~ str:byte(i)
-    x = x * 16777619
-    if x >= 0x200000000 then x = x % 0x200000000 end
-    h = x & MASK
+    local x = xor_u32(h, str:byte(i))
+    x = (x * 16777619) % MOD
+    h = and_u32(x, MASK)
   end
   return h
 end
@@ -598,17 +640,17 @@ end
 ------------------------------------------------------------
 local function encrypt_slice(str, seed)
   -- 派生密钥
-  local key = prng(seed) ~ prng(seed >> 8)
-  key = key & 0xFF
+  local key = xor_u32(prng(seed), prng(math.floor(seed / 256)))
+  key = and_u32(key, 0xFF)
   if key == 0 then key = 1 end
 
   -- 派生乱序种子
-  local shuffle_seed = prng(seed ~ (key * 31337))
+  local shuffle_seed = prng(xor_u32(seed, key * 31337))
 
   -- 加密字节
   local raw = {}
   for i = 1, #str do
-    raw[i] = str:byte(i) ~ key
+    raw[i] = xor_u32(str:byte(i), key)
   end
 
   -- 切片：每 4 字节一片，最后一片可能不足 4
@@ -696,7 +738,7 @@ function(key, slices)
   table.sort(slices, function(a, b) return (a.orig or 0) < (b.orig or 0) end)
   for _, s in ipairs(slices) do
     for _, b in ipairs(s.slice or s) do
-      r[#r + 1] = string.char((b ~ key) & 0xFF)
+      r[#r + 1] = string.char(xor_byte(b, key))
     end
   end
   return table.concat(r)
@@ -713,7 +755,7 @@ function(key, slices)
   end
   local out = {}
   for i = 1, #flat do
-    out[i] = string.char((flat[i] ~ key) & 0xFF)
+    out[i] = string.char(xor_byte(flat[i], key))
   end
   return table.concat(out)
 end,
@@ -733,8 +775,8 @@ function(key, slices)
     end
   end
   local r = {}
-  for i = 1, #h1 do r[#r + 1] = string.char((h1[i] ~ key) & 0xFF) end
-  for i = 1, #h2 do r[#r + 1] = string.char((h2[i] ~ key) & 0xFF) end
+  for i = 1, #h1 do r[#r + 1] = string.char(xor_byte(h1[i], key)) end
+  for i = 1, #h2 do r[#r + 1] = string.char(xor_byte(h2[i], key)) end
   return table.concat(r)
 end,
 
@@ -745,7 +787,7 @@ function(key, slices)
   local idx = 1
   for _, s in ipairs(slices) do
     for _, b in ipairs(s.slice or s) do
-      t[idx] = string.char((b ~ key) & 0xFF); idx = idx + 1
+      t[idx] = string.char(xor_byte(b, key)); idx = idx + 1
     end
   end
   return table.concat(t)
@@ -762,7 +804,7 @@ function(key, slices)
   end
   local r = {}
   for i = #flat, 1, -1 do
-    r[#r + 1] = string.char((flat[i] ~ key) & 0xFF)
+    r[#r + 1] = string.char(xor_byte(flat[i], key))
   end
   return table.concat(r)
 end,
@@ -778,7 +820,7 @@ function(key, slices)
   local t = {}
   for _, s in ipairs(slices) do
     for _, b in ipairs(s.slice or s) do
-      t[#t + 1] = string.char(((b ~ (key + 1)) & 0xFF))
+      t[#t + 1] = string.char(xor_byte(b, key + 1))
     end
   end
   return table.concat(t)
@@ -790,7 +832,7 @@ function(key, slices)
   local t = {}
   for _, s in ipairs(slices) do
     for _, b in ipairs(s.slice or s) do
-      t[#t + 1] = string.char((b ~ key) & 0xFF)
+      t[#t + 1] = string.char(xor_byte(b, key))
     end
   end
   return table.concat(t)
@@ -803,7 +845,7 @@ function(key, slices)
   for si, s in ipairs(slices) do
     local last = #s.slice
     for i = 1, last - 1 do
-      t[#t + 1] = string.char((s.slice[i] ~ key) & 0xFF)
+      t[#t + 1] = string.char(xor_byte(s.slice[i], key))
     end
   end
   return table.concat(t)
@@ -826,7 +868,7 @@ local function build_decode_expr(chunks, key, template_idx)
   end
   local chunks_lua = "{" .. table.concat(chunk_strs, ",") .. "}"
   local key_str = tostring(key)
-  return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=c[i].pos;for j=2,5 do local v=c[i][j];if v and v~=0 then t[p*4+j-5]=string.char((v~k)&255)end end end;return table.concat(t)end"
+  return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=c[i].pos;for j=2,5 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=k%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
 end
 
 ------------------------------------------------------------
@@ -845,13 +887,13 @@ local function build_decoy_expr(chunks, key, decoy_idx)
   local key_str = tostring(key)
   if decoy_idx == 1 then
     -- 错误的 key
-    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=c[i].pos;for j=2,5 do local v=c[i][j];if v and v~=0 then t[p*4+j-5]=string.char(((v~(k+1)))&255)end end end;return table.concat(t)end"
+    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=c[i].pos;for j=2,5 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=(k+1)%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
   elseif decoy_idx == 2 then
     -- 错误位置（颠倒 pos）
-    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=#c-i+1;for j=2,5 do local v=c[i][j];if v and v~=0 then t[p*4+j-5]=string.char((v~k)&255)end end end;return table.concat(t)end"
+    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c do local p=#c-i+1;for j=2,5 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=k%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
   else
     -- 漏掉最后字节
-    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c-1 do local p=c[i].pos;for j=2,4 do local v=c[i][j];if v and v~=0 then t[p*4+j-5]=string.char((v~k)&255)end end end;return table.concat(t)end"
+    return "(function()local k=" .. key_str .. ";local c=" .. chunks_lua .. ";local t={};for i=1,#c-1 do local p=c[i].pos;for j=2,4 do local v=c[i][j];if v and v~=0 then local x=v%256;local y=k%256;local z=x~y;t[p*4+j-5]=string.char(z&255)end end end;return table.concat(t)end)"
   end
 end
 
