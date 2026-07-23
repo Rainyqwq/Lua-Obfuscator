@@ -80,7 +80,7 @@ local result, log = pm:run(code, {
 -- log: { {name, title, elapsed, input_size, output_size}, ... }
 ```
 
-## 内置 Pass（v2.8.0）
+## 内置 Pass（v2.8.1）
 
 | order | name | title | 默认 | 说明 |
 |-------|------|-------|------|------|

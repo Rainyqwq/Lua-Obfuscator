@@ -1041,7 +1041,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "2.8.0"
+local VERSION = "2.8.1"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -3297,7 +3297,7 @@ local M = {}
 M.name        = "vm_protect"
 M.title       = "VM字节码虚拟化"
 M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行"
-M.version     = "2.8.0"
+M.version     = "2.8.1"
 M.author      = "Rainy_qwq"
 M.order       = 10
 M.enabled     = false  -- 默认关闭，需手动开启
@@ -5228,7 +5228,7 @@ M.order   = 200
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.8
+-- Obfuscated by Lua Obfuscator v2.8.1
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --
@@ -5526,7 +5526,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.8.0"
+local VERSION = "2.8.1"
 
 -- ============================================================
 -- 加载 Pass 系统

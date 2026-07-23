@@ -2,7 +2,7 @@
 
 Lua 代码混淆工具，支持多种混淆技术和 VM 字节码虚拟化保护。
 
-**当前版本：v2.8.0**
+**当前版本：v2.8.1**
 
 ## 功能概览
 
@@ -44,7 +44,8 @@ lua-obfuscator/
 │   ├── anti_debug.lua / call_indirect.lua / header.lua
 ├── tests/                  # 测试文件
 ├── README.md / PROJECT.md / PASS_API.md / JS_API.md
-└── RELEASE_NOTES_v2.8.0.md
+├── RELEASE_NOTES_v2.8.0.md
+└── RELEASE_NOTES_v2.8.1.md
 ```
 
 ## 使用
@@ -81,6 +82,7 @@ lua tests/test_85.lua      # 核心功能
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| **2.8.1** | 2026-07-23 | 修复 var_mangle 表构造扫描死循环（浏览器无 VM 也卡死）；默认除 VM/反调试外全开 |
 | **2.8.0** | 2026-07-23 | 稳定性大修：VM for 步长/FORLOOP、num_encrypt 32 位安全、BCF 完整语句包装、去静默禁用；字符串池/反调试/调用间接化；Web 超时保护 |
 | 2.7.x | 2026-07 | 反调试、调用间接化、字符串池 Fengari 修复 |
 | 2.6.0 | 2026-07 | 发布整理、基本块拆分 Web 同步 |
