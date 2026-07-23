@@ -22,7 +22,7 @@ M.name    = "basic_block_splitting"
 M.title   = "基本块拆分"
 M.version = "1.0.0"
 M.order   = 90
-M.enabled = false
+M.enabled = true
 
 -- 修正版深度计算：else 不计为 open，elseif 行的 then 不计为 open
 -- 原 utils.calc_depth 将 else 计为 +1 open，导致 if-else-end 深度不归零

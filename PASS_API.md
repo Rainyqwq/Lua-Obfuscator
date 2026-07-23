@@ -88,12 +88,12 @@ local result, log = pm:run(code, {
 | 15 | `anti_debug` | 反调试检测 | ❌ | hook / 计时 / JIT |
 | 20 | `string_encryption` | 字符串加密 | ✅ | 分层字符串池 |
 | 30 | `variable_mangling` | 变量名混淆 | ✅ | 局部变量随机化 |
-| 40 | `instruction_substitution` | 指令替换 | ❌ | 原子表达式等价替换 |
+| 40 | `instruction_substitution` | 指令替换 | ✅ | 原子表达式等价替换 |
 | 50 | `constant_encryption` | 常量数字加密 | ✅ | Fengari 安全编码 |
 | 65 | `advanced_fake_cf` | 虚假控制流增强 | ✅ | 不可达复杂分支 |
-| 70 | `control_flow_flattening` | 控制流平坦化 | ❌ | dispatcher 重组 |
-| 80 | `bogus_control_flow` | BCF 虚假控制流 | ❌ | 仅包装完整语句 |
-| 85 | `call_indirection` | 调用间接化 | ❌ | 全局调用经分发表 |
+| 70 | `control_flow_flattening` | 控制流平坦化 | ✅ | dispatcher 重组 |
+| 80 | `bogus_control_flow` | BCF 虚假控制流 | ✅ | 仅包装完整语句 |
+| 85 | `call_indirection` | 调用间接化 | ✅ | 全局调用经分发表 |
 | 90 | `basic_block_splitting` | 基本块拆分 | ✅ | goto/label 拆分 |
 | 100 | `junk_comments` | 垃圾注释注入 | ✅ | 噪音注释 |
 | 200 | `header` | 代码头部 | ✅ | 版本与警告头 |

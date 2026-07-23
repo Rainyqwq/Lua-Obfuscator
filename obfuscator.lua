@@ -70,15 +70,15 @@ local Config = {
   vm_protect                = false,
   string_encryption         = true,
   variable_mangling         = true,
-  instruction_substitution  = false,
+  instruction_substitution  = true,
   constant_encryption       = true,
   advanced_fake_cf          = true,
-  control_flow_flattening   = false,
- bogus_control_flow        = false,
+  control_flow_flattening   = true,
+ bogus_control_flow        = true,
   basic_block_splitting    = true,
  junk_comments             = true,
   anti_debug               = false,
-  call_indirection         = false,
+  call_indirection          = true,
 }
 
 -- Config key → Pass name 映射

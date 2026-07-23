@@ -21,7 +21,7 @@ M.name    = "bogus_control_flow"
 M.title   = "BCF虚假控制流"
 M.version = "1.1.0"
 M.order   = 80
-M.enabled = false
+M.enabled = true
 
 local function generate_opaque_predicate()
   local v = "_v" .. random_id(3)

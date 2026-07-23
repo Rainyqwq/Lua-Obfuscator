@@ -1,4 +1,4 @@
-﻿-- ================================================================
+-- ================================================================
 -- passes/call_indirect.lua
 -- Function call indirection via runtime lookup table
 --
@@ -17,7 +17,7 @@ M.name = "call_indirection"
 M.title = "Function Call Indirection"
 M.version = "1.2.0"
 M.order = 85
-M.enabled = false
+M.enabled = true
 
 local RESERVED = {
   ["if"] = true, ["then"] = true, ["else"] = true, ["elseif"] = true, ["end"] = true,

@@ -4663,7 +4663,7 @@ M.name    = "bogus_control_flow"
 M.title   = "BCF虚假控制流"
 M.version = "1.1.0"
 M.order   = 80
-M.enabled = false
+M.enabled = true
 
 local function generate_opaque_predicate()
   local v = "_v" .. random_id(3)
@@ -4825,7 +4825,7 @@ M.name    = "basic_block_splitting"
 M.title   = "基本块拆分"
 M.version = "1.0.0"
 M.order   = 90
-M.enabled = false
+M.enabled = true
 
 -- 修正版深度计算：else 不计为 open，elseif 行的 then 不计为 open
 -- 原 utils.calc_depth 将 else 计为 +1 open，导致 if-else-end 深度不归零
@@ -5326,7 +5326,7 @@ M.name = "call_indirection"
 M.title = "Function Call Indirection"
 M.version = "1.2.0"
 M.order = 85
-M.enabled = false
+M.enabled = true
 
 local RESERVED = {
   ["if"] = true, ["then"] = true, ["else"] = true, ["elseif"] = true, ["end"] = true,
@@ -5547,15 +5547,15 @@ local Config = {
   vm_protect                = false,
   string_encryption         = true,
   variable_mangling         = true,
-  instruction_substitution  = false,
+  instruction_substitution  = true,
   constant_encryption       = true,
   advanced_fake_cf          = true,
-  control_flow_flattening   = false,
- bogus_control_flow        = false,
+  control_flow_flattening   = true,
+ bogus_control_flow        = true,
   basic_block_splitting    = true,
  junk_comments             = true,
   anti_debug               = false,
-  call_indirection         = false,
+  call_indirection          = true,
 }
 
 -- Config key → Pass name 映射
