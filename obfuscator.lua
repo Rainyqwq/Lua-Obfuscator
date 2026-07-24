@@ -101,13 +101,14 @@ local CONFIG_TO_PASS = {
   anti_debug                = "anti_debug",
   call_indirection          = "call_indirection",
    vm_function               = "vm_function",
+  vm_function_auto_tag     = "vm_function",
 }
 
 local PASS_KEYS = {
   "vm_protect", "string_encryption", "variable_mangling",
   "instruction_substitution", "constant_encryption", "advanced_fake_cf",
   "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
-   "vm_function", "junk_comments", "anti_debug", "call_indirection",
+   "vm_function", "vm_function_auto_tag", "junk_comments", "anti_debug", "call_indirection",
 }
 
 -- Protection presets: fast / balanced / max
@@ -119,6 +120,7 @@ local PRESETS = {
     advanced_fake_cf = false, control_flow_flattening = false,
     bogus_control_flow = false, basic_block_splitting = false,
      junk_comments = true, call_indirection = false, vm_function = false,
+     vm_function_auto_tag = false,
   },
   balanced = {
     vm_protect = false, anti_debug = false,
@@ -127,6 +129,7 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
      junk_comments = true, call_indirection = true, vm_function = true,
+     vm_function_auto_tag = false,
   },
   max = {
     vm_protect = true, anti_debug = true,
@@ -135,6 +138,7 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
      junk_comments = true, call_indirection = true, vm_function = true,
+     vm_function_auto_tag = true,
   },
 }
 
@@ -177,8 +181,10 @@ local function sync_config_to_passes()
     whitelist = list_to_set(Config.name_whitelist),
   })
   string_pool.set_whitelist(Config.string_whitelist)
+  pm:set_pass_config("vm_function", { vm_function_auto_tag = Config.vm_function_auto_tag and true or false })
    -- vm_function and vm_protect are mutually exclusive
    if Config.vm_function then Config.vm_protect = false end
+  if Config.vm_function_auto_tag then Config.vm_function = true end
 end
 
 -- ============================================================
@@ -240,6 +246,7 @@ local feature_names = {
   { key = "basic_block_splitting",   name = "基本块拆分" },
  { key = "vm_protect",               name = "VM字节码虚拟化" },
   { key = "vm_function",               name = "函数级VM保护" },
+  { key = "vm_function_auto_tag",    name = "函数级VM自动标记" },
   { key = "anti_debug",               name = "反调试检测" },
   { key = "call_indirection",         name = "调用间接化" },
 }

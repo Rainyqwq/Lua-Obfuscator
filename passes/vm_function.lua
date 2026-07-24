@@ -54,9 +54,21 @@ local function is_recursive(func_body, func_name)
   return false
 end
 
-function M.apply(code,ctx)
+function M.apply(code, ctx)
   -- Strip UTF-8 BOM if present
   if code:sub(1,3) == "\239\187\191" then code = code:sub(4) end
+  -- Auto-tag: add --@vm before every top-level function when enabled
+  if ctx.config and ctx.config.vm_function_auto_tag then
+    local tagged = {}
+    for line in code:gmatch("[^\n]*\n?") do
+      if line:match("^local function ") or line:match("^function [a-zA-Z_][a-zA-Z0-9_]*%s*%(") then
+        table.insert(tagged, "--@vm\n")
+      end
+      table.insert(tagged, line)
+    end
+    code = table.concat(tagged)
+  end
+
   local vm=ctx.vm_module or require("passes.vm")
   local code_lines={}
   for line in code:gmatch("[^\n]*\n?")do code_lines[#code_lines+1]=line end
@@ -110,3 +122,4 @@ function M.apply(code,ctx)
 end
 
 return M
+

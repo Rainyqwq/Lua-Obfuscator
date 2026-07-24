@@ -1,25 +1,25 @@
--- ================================================================
+﻿-- ================================================================
 -- passes/header.lua
--- 代码头部
+-- 浠ｇ爜澶撮儴
 --
 -- Author: Rainy_qwq
 -- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
 -- License: MIT
 -- ================================================================
--- 在混淆后的代码开头添加版本标识和警告信息
--- 这是 Pipeline 的最后一步，不改变代码逻辑
+-- 鍦ㄦ贩娣嗗悗鐨勪唬鐮佸紑澶存坊鍔犵増鏈爣璇嗗拰璀﹀憡淇℃伅
+-- 杩欐槸 Pipeline 鐨勬渶鍚庝竴姝ワ紝涓嶆敼鍙樹唬鐮侀€昏緫
 
 local M = {}
 
 M.name    = "header"
-M.title   = "添加代码头"
+M.title   = "娣诲姞浠ｇ爜澶?
 M.version = "1.1.0"
 M.order   = 200
 
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.9.0
+-- Obfuscated by Lua Obfuscator v2.10.0
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --

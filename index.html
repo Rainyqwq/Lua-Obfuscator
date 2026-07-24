@@ -8701,26 +8701,26 @@ return M
   package.preload["passes.header"] = function()
     return load([[-- ================================================================
 -- passes/header.lua
--- 代码头部
+-- 浠ｇ爜澶撮儴
 --
 -- Author: Rainy_qwq
 -- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
 -- License: MIT
 -- ================================================================
--- 在混淆后的代码开头添加版本标识和警告信息
--- 这是 Pipeline 的最后一步，不改变代码逻辑
+-- 鍦ㄦ贩娣嗗悗鐨勪唬鐮佸紑澶存坊鍔犵増鏈爣璇嗗拰璀﹀憡淇℃伅
+-- 杩欐槸 Pipeline 鐨勬渶鍚庝竴姝ワ紝涓嶆敼鍙樹唬鐮侀€昏緫
 
 local M = {}
 
 M.name    = "header"
-M.title   = "添加代码头"
+M.title   = "娣诲姞浠ｇ爜澶?
 M.version = "1.1.0"
 M.order   = 200
 
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.9.0
+-- Obfuscated by Lua Obfuscator v2.10.0
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --
@@ -9683,7 +9683,8 @@ const FEATURES = [
   { id: 'adv_fake',      name: '虚假控制流',   desc: 'AdvFake',    default: true },
   { id: 'junk_comment',  name: '垃圾注释',     desc: 'Junk',       default: true },
   { id: 'vm_protect',    name: 'VM字节码保护', desc: 'VM',         default: false },
-  { id: 'vm_function',    name: '函数级VM保护', desc: 'VMFunc',     default: false },
+  { id: 'vm_function',    name: '函数级VM保护',    desc: 'VMFunc',     default: false },
+  { id: 'vm_function_auto_tag', name: '函数级VM自动标记', desc: 'VMTag',  default: false },
   { id: 'anti_debug',    name: '反调试检测',   desc: 'AntiDebug',  default: false },
   { id: 'call_indirect', name: '调用间接化',   desc: 'CallIndir',  default: true },
 ];
@@ -9712,6 +9713,7 @@ function buildLuaOpts(){
     junk_comments: config.junk_comment,
     vm_protect: config.vm_protect,
     vm_function: config.vm_function,
+    vm_function_auto_tag: config.vm_function_auto_tag,
     ...(config.vm_function ? { vm_protect: false } : {}),
     anti_debug: config.anti_debug,
     call_indirection: config.call_indirect,
