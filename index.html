@@ -5962,6 +5962,16 @@ do
     -- Safety: hard step limit prevents browser hang if bytecode is corrupted
     local _steps = 0
     local _max_steps = 5000000
+
+    -- VM Polymorphism: inject fake opcodes to increase analysis surface
+    do
+      local _fake_ops = {}
+      for _fi = 1, 8 do
+        local _op = math.random(200, 511)
+        _fake_ops[_fi] = _op
+        H[_op] = function() end
+      end
+    end
     while pc <= #code do
       _steps = _steps + 1
       if _steps > _max_steps then
@@ -6369,6 +6379,16 @@ generate_function_vm(proto, key)
       end
     end
 
+
+    -- VM Polymorphism: inject fake opcodes to increase analysis surface
+    do
+      local _fake_ops = {}
+      for _fi = 1, 8 do
+        local _op = math.random(200, 511)
+        _fake_ops[_fi] = _op
+        H[_op] = function() end
+      end
+    end
     while pc <= #code do
       local ins = code[pc]
       local op = ins.op
@@ -6624,6 +6644,7 @@ end
 
 
 return M
+
 ]=], "@passes/vm.lua")()
   end
   package.preload["passes.vm_protect"] = function()
@@ -6723,9 +6744,21 @@ local function is_recursive(func_body, func_name)
   return false
 end
 
-function M.apply(code,ctx)
+function M.apply(code, ctx)
   -- Strip UTF-8 BOM if present
   if code:sub(1,3) == "\\239\\187\\191" then code = code:sub(4) end
+  -- Auto-tag: add --@vm before every top-level function when enabled
+  if ctx.config and ctx.config.vm_function_auto_tag then
+    local tagged = {}
+    for line in code:gmatch("[^\\n]*\\n?") do
+      if line:match("^local function ") or line:match("^function [a-zA-Z_][a-zA-Z0-9_]*%s*%(") then
+        table.insert(tagged, "--@vm\\n")
+      end
+      table.insert(tagged, line)
+    end
+    code = table.concat(tagged)
+  end
+
   local vm=ctx.vm_module or require("passes.vm")
   local code_lines={}
   for line in code:gmatch("[^\\n]*\\n?")do code_lines[#code_lines+1]=line end
@@ -6779,6 +6812,7 @@ function M.apply(code,ctx)
 end
 
 return M
+
 ]], "@passes/vm_function.lua")()
   end
   package.preload["passes.string_encrypt"] = function()
@@ -6999,23 +7033,52 @@ end
 
 -- 收集表键名（避免把表字段键当变量重命名）
 local function collect_table_keys(code)
-  local keys = {}
+  -- 1. Lua metamethods: always preserve
+  local keys = {
+    __index=true, __newindex=true, __add=true, __sub=true, __mul=true,
+    __div=true, __mod=true, __pow=true, __unm=true, __len=true,
+    __eq=true, __lt=true, __le=true, __concat=true, __call=true,
+    __tostring=true, __gc=true, __ipairs=true, __pairs=true,
+    __len=true, __pairs=true,
+  }
   local i = 1
   local len = #code
   while i <= len do
     local b = code:byte(i)
-    -- 跳过字符串占位符
-    if b == 34 or b == 39 then
+    -- Skip string placeholders
+    if b == 95 and code:sub(i, i+3) == "__ST" then
+      local ep = code:find("__", i+5, true)
+      i = ep and (ep+2) or (i+1)
+    -- Skip comments
+    elseif b == 45 and i < len and code:byte(i+1) == 45 then
+      local nl = code:find("\\n", i+2, true)
+      i = nl and (nl+1) or (len+1)
+    -- Skip string literals
+    elseif b == 34 or b == 39 then
       local q = b; i = i + 1
       while i <= len do
         if code:byte(i) == 92 then i = i + 2
         elseif code:byte(i) == q then i = i + 1; break
         else i = i + 1 end
       end
-    elseif b == 45 and i < len and code:byte(i+1) == 45 then
-      local nl = code:find("\\n", i+2, true)
-      i = nl and (nl+1) or (len+1)
-    -- 处理表结构
+    -- Skip [expr] in table literals
+    elseif b == 91 then
+      i = i + 1
+      local depth = 1
+      while i <= len and depth > 0 do
+        local cb = code:byte(i)
+        if cb == 91 then depth = depth + 1
+        elseif cb == 93 then depth = depth - 1
+        elseif cb == 34 or cb == 39 then
+          local q2 = cb; i = i + 1
+          while i <= len do
+            if code:byte(i) == 92 then i = i + 2
+            elseif code:byte(i) == q2 then i = i + 1; break
+            else i = i + 1 end
+          end
+        else i = i + 1 end
+      end
+    -- Table literal: { key = value }
     elseif b == 123 then
       i = i + 1
       local depth = 1
@@ -7024,20 +7087,11 @@ local function collect_table_keys(code)
         if cb == 123 then depth = depth + 1; i = i + 1
         elseif cb == 125 then depth = depth - 1; i = i + 1
         elseif cb == 34 or cb == 39 then
-          local q = cb; i = i + 1
+          local q3 = cb; i = i + 1
           while i <= len do
             if code:byte(i) == 92 then i = i + 2
-            elseif code:byte(i) == q then i = i + 1; break
+            elseif code:byte(i) == q3 then i = i + 1; break
             else i = i + 1 end
-          end
-        elseif cb == 91 then
-          i = i + 1
-          while i <= len and code:byte(i) ~= 93 do i = i + 1 end
-          i = i + 1
-          while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
-          if code:byte(i) == 61 then
-            i = i + 1
-            while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
           end
         elseif (cb >= 65 and cb <= 90) or (cb >= 97 and cb <= 122) or cb == 95 then
           local start = i
@@ -7047,14 +7101,39 @@ local function collect_table_keys(code)
             if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
           end
           local key = code:sub(start, i - 1)
-          -- 跳过已扩展的方括号内容 = 结束
           while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
           if code:byte(i) == 61 then
             keys[key] = true
             i = i + 1
           end
-        else
+        else i = i + 1 end
+      end
+    -- Dot access: xxx.fieldname
+    elseif (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95 then
+      local start = i
+      i = i + 1
+      while i <= len do
+        local ib = code:byte(i)
+        if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
+      end
+      local idname = code:sub(start, i-1)
+      -- Skip Lua keywords
+      local kw = {["local"]=1,["function"]=1,["if"]=1,["for"]=1,["while"]=1,["return"]=1,["end"]=1,["then"]=1,["do"]=1,["else"]=1,["or"]=1,["and"]=1,["not"]=1,["in"]=1,["repeat"]=1,["until"]=1,["break"]=1,["goto"]=1}
+      if not kw[idname] then
+        while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+        if code:byte(i) == 46 then
           i = i + 1
+          while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+          if (code:byte(i) >= 65 and code:byte(i) <= 90) or (code:byte(i) >= 97 and code:byte(i) <= 122) or code:byte(i) == 95 then
+            local fstart = i
+            i = i + 1
+            while i <= len do
+              local ib = code:byte(i)
+              if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
+            end
+            local fieldname = code:sub(fstart, i-1)
+            keys[fieldname] = true
+          end
         end
       end
     else
@@ -7063,6 +7142,7 @@ local function collect_table_keys(code)
   end
   return keys
 end
+
 
 local function normalize_whitelist(wl)
   local out = {}
@@ -8701,19 +8781,18 @@ return M
   package.preload["passes.header"] = function()
     return load([[-- ================================================================
 -- passes/header.lua
--- 浠ｇ爜澶撮儴
+-- 代码头部
 --
 -- Author: Rainy_qwq
 -- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
 -- License: MIT
 -- ================================================================
--- 鍦ㄦ贩娣嗗悗鐨勪唬鐮佸紑澶存坊鍔犵増鏈爣璇嗗拰璀﹀憡淇℃伅
--- 杩欐槸 Pipeline 鐨勬渶鍚庝竴姝ワ紝涓嶆敼鍙樹唬鐮侀€昏緫
+-- 在混淆后的代码开头添加版本标签和警告信息
 
 local M = {}
 
 M.name    = "header"
-M.title   = "娣诲姞浠ｇ爜澶?
+M.title   = "添加代码头部"
 M.version = "1.1.0"
 M.order   = 200
 
@@ -9071,13 +9150,14 @@ local CONFIG_TO_PASS = {
   anti_debug                = "anti_debug",
   call_indirection          = "call_indirection",
    vm_function               = "vm_function",
+  vm_function_auto_tag     = "vm_function",
 }
 
 local PASS_KEYS = {
   "vm_protect", "string_encryption", "variable_mangling",
   "instruction_substitution", "constant_encryption", "advanced_fake_cf",
   "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
-   "vm_function", "junk_comments", "anti_debug", "call_indirection",
+   "vm_function", "vm_function_auto_tag", "junk_comments", "anti_debug", "call_indirection",
 }
 
 -- Protection presets: fast / balanced / max
@@ -9089,6 +9169,7 @@ local PRESETS = {
     advanced_fake_cf = false, control_flow_flattening = false,
     bogus_control_flow = false, basic_block_splitting = false,
      junk_comments = true, call_indirection = false, vm_function = false,
+     vm_function_auto_tag = false,
   },
   balanced = {
     vm_protect = false, anti_debug = false,
@@ -9097,6 +9178,7 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
      junk_comments = true, call_indirection = true, vm_function = true,
+     vm_function_auto_tag = false,
   },
   max = {
     vm_protect = true, anti_debug = true,
@@ -9105,6 +9187,7 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
      junk_comments = true, call_indirection = true, vm_function = true,
+     vm_function_auto_tag = true,
   },
 }
 
@@ -9147,8 +9230,10 @@ local function sync_config_to_passes()
     whitelist = list_to_set(Config.name_whitelist),
   })
   string_pool.set_whitelist(Config.string_whitelist)
+  pm:set_pass_config("vm_function", { vm_function_auto_tag = Config.vm_function_auto_tag and true or false })
    -- vm_function and vm_protect are mutually exclusive
    if Config.vm_function then Config.vm_protect = false end
+  if Config.vm_function_auto_tag then Config.vm_function = true end
 end
 
 -- ============================================================
@@ -9210,6 +9295,7 @@ local feature_names = {
   { key = "basic_block_splitting",   name = "基本块拆分" },
  { key = "vm_protect",               name = "VM字节码虚拟化" },
   { key = "vm_function",               name = "函数级VM保护" },
+  { key = "vm_function_auto_tag",    name = "函数级VM自动标记" },
   { key = "anti_debug",               name = "反调试检测" },
   { key = "call_indirection",         name = "调用间接化" },
 }

@@ -132,13 +132,13 @@ local PRESETS = {
      vm_function_auto_tag = false,
   },
   max = {
-    vm_protect = true, anti_debug = true,
+    vm_protect = false, anti_debug = true,
     string_encryption = true, variable_mangling = true,
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-     junk_comments = true, call_indirection = true, vm_function = true,
-     vm_function_auto_tag = true,
+    junk_comments = true, call_indirection = true, vm_function = true,
+    vm_function_auto_tag = true,
   },
 }
 

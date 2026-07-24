@@ -180,23 +180,52 @@ end
 
 -- 收集表键名（避免把表字段键当变量重命名）
 local function collect_table_keys(code)
-  local keys = {}
+  -- 1. Lua metamethods: always preserve
+  local keys = {
+    __index=true, __newindex=true, __add=true, __sub=true, __mul=true,
+    __div=true, __mod=true, __pow=true, __unm=true, __len=true,
+    __eq=true, __lt=true, __le=true, __concat=true, __call=true,
+    __tostring=true, __gc=true, __ipairs=true, __pairs=true,
+    __len=true, __pairs=true,
+  }
   local i = 1
   local len = #code
   while i <= len do
     local b = code:byte(i)
-    -- 跳过字符串占位符
-    if b == 34 or b == 39 then
+    -- Skip string placeholders
+    if b == 95 and code:sub(i, i+3) == "__ST" then
+      local ep = code:find("__", i+5, true)
+      i = ep and (ep+2) or (i+1)
+    -- Skip comments
+    elseif b == 45 and i < len and code:byte(i+1) == 45 then
+      local nl = code:find("\n", i+2, true)
+      i = nl and (nl+1) or (len+1)
+    -- Skip string literals
+    elseif b == 34 or b == 39 then
       local q = b; i = i + 1
       while i <= len do
         if code:byte(i) == 92 then i = i + 2
         elseif code:byte(i) == q then i = i + 1; break
         else i = i + 1 end
       end
-    elseif b == 45 and i < len and code:byte(i+1) == 45 then
-      local nl = code:find("\n", i+2, true)
-      i = nl and (nl+1) or (len+1)
-    -- 处理表结构
+    -- Skip [expr] in table literals
+    elseif b == 91 then
+      i = i + 1
+      local depth = 1
+      while i <= len and depth > 0 do
+        local cb = code:byte(i)
+        if cb == 91 then depth = depth + 1
+        elseif cb == 93 then depth = depth - 1
+        elseif cb == 34 or cb == 39 then
+          local q2 = cb; i = i + 1
+          while i <= len do
+            if code:byte(i) == 92 then i = i + 2
+            elseif code:byte(i) == q2 then i = i + 1; break
+            else i = i + 1 end
+          end
+        else i = i + 1 end
+      end
+    -- Table literal: { key = value }
     elseif b == 123 then
       i = i + 1
       local depth = 1
@@ -205,20 +234,11 @@ local function collect_table_keys(code)
         if cb == 123 then depth = depth + 1; i = i + 1
         elseif cb == 125 then depth = depth - 1; i = i + 1
         elseif cb == 34 or cb == 39 then
-          local q = cb; i = i + 1
+          local q3 = cb; i = i + 1
           while i <= len do
             if code:byte(i) == 92 then i = i + 2
-            elseif code:byte(i) == q then i = i + 1; break
+            elseif code:byte(i) == q3 then i = i + 1; break
             else i = i + 1 end
-          end
-        elseif cb == 91 then
-          i = i + 1
-          while i <= len and code:byte(i) ~= 93 do i = i + 1 end
-          i = i + 1
-          while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
-          if code:byte(i) == 61 then
-            i = i + 1
-            while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
           end
         elseif (cb >= 65 and cb <= 90) or (cb >= 97 and cb <= 122) or cb == 95 then
           local start = i
@@ -228,14 +248,39 @@ local function collect_table_keys(code)
             if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
           end
           local key = code:sub(start, i - 1)
-          -- 跳过已扩展的方括号内容 = 结束
           while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
           if code:byte(i) == 61 then
             keys[key] = true
             i = i + 1
           end
-        else
+        else i = i + 1 end
+      end
+    -- Dot access: xxx.fieldname
+    elseif (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95 then
+      local start = i
+      i = i + 1
+      while i <= len do
+        local ib = code:byte(i)
+        if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
+      end
+      local idname = code:sub(start, i-1)
+      -- Skip Lua keywords
+      local kw = {["local"]=1,["function"]=1,["if"]=1,["for"]=1,["while"]=1,["return"]=1,["end"]=1,["then"]=1,["do"]=1,["else"]=1,["or"]=1,["and"]=1,["not"]=1,["in"]=1,["repeat"]=1,["until"]=1,["break"]=1,["goto"]=1}
+      if not kw[idname] then
+        while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+        if code:byte(i) == 46 then
           i = i + 1
+          while i <= len and (code:byte(i) == 32 or code:byte(i) == 9) do i = i + 1 end
+          if (code:byte(i) >= 65 and code:byte(i) <= 90) or (code:byte(i) >= 97 and code:byte(i) <= 122) or code:byte(i) == 95 then
+            local fstart = i
+            i = i + 1
+            while i <= len do
+              local ib = code:byte(i)
+              if (ib >= 48 and ib <= 57) or (ib >= 65 and ib <= 90) or (ib >= 97 and ib <= 122) or ib == 95 then i = i + 1 else break end
+            end
+            local fieldname = code:sub(fstart, i-1)
+            keys[fieldname] = true
+          end
         end
       end
     else
@@ -244,6 +289,7 @@ local function collect_table_keys(code)
   end
   return keys
 end
+
 
 local function normalize_whitelist(wl)
   local out = {}
