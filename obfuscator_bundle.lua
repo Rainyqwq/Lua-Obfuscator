@@ -4087,6 +4087,7 @@ function M.apply(code, ctx)
       out[#out+1]="-- @vm (protected)"
       for line in rep.new_src:gmatch("[^\n]*\n?")do out[#out+1]=line end
     else
+      cur=rep.finish+1
       out[#out+1]="-- @vm (skipped: recursive)"
     end
   end
