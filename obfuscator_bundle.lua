@@ -1089,7 +1089,9 @@ if _VERSION then
     end
   end
 end
+
 local VERSION = "2.10.0"
+
 ------------------------------------------------------------
 -- 自定义指令集定义
 ------------------------------------------------------------
@@ -1142,11 +1144,13 @@ local OPC = {
   SETUPVAL = 45,  -- upvalues[B] = R[A]
   EXTRARG  = 43,  -- extra argument for previous instruction
 }
+
 ------------------------------------------------------------
 -- 简单递归下降解析器
 ------------------------------------------------------------
 local Parser = {}
 Parser.__index = Parser
+
 function Parser.new(source)
   return setmetatable({
     source = source,
@@ -1156,6 +1160,7 @@ function Parser.new(source)
     token_pos = 1,
   }, Parser)
 end
+
 -- Tokenizer
 function Parser:peek()
   self:skip_ws()
@@ -1230,6 +1235,7 @@ function Parser:peek()
       end
     end
   end
+
   -- Operators
   local ops = {
     ["+"] = "+", ["-"] = "-", ["*"] = "*", ["/"] = "/",
@@ -1292,6 +1298,7 @@ function Parser:peek()
   self.tokens[#self.tokens + 1] = tok
   return tok
 end
+
 function Parser:advance()
   local tok = self:peek()
   self.token_pos = self.token_pos + 1
@@ -1310,6 +1317,7 @@ function Parser:advance()
   self:skip_ws()
   return tok
 end
+
 function Parser:skip_ws()
   while self.pos <= self.len do
     local c = self.source:sub(self.pos, self.pos)
@@ -1350,6 +1358,7 @@ function Parser:skip_ws()
     end
   end
 end
+
 function Parser:expect(type, value)
   local tok = self:advance()
   if tok.type ~= type or (value and tok.value ~= value) then
@@ -1358,6 +1367,7 @@ function Parser:expect(type, value)
   end
   return tok
 end
+
 function Parser:match(type, value)
   local tok = self:peek()
   if tok.type == type and (not value or tok.value == value) then
@@ -1365,6 +1375,7 @@ function Parser:match(type, value)
   end
   return nil
 end
+
 -- AST Node constructors
 local function ast_block(stmts) return { type = "block", stmts = stmts } end
 local function ast_assign(targets, values) return { type = "assign", targets = targets, values = values } end
@@ -1391,6 +1402,7 @@ local function ast_do_block(body) return { type = "do_block", body = body } end
 local function ast_repeat(body, cond) return { type = "repeat", body = body, cond = cond } end
 local function ast_goto(label) return { type = "goto", label = label } end
 local function ast_label(name) return { type = "label", name = name } end
+
 function Parser:parse_block()
   local stmts = {}
   while true do
@@ -1407,6 +1419,7 @@ function Parser:parse_block()
   end
   return ast_block(stmts)
 end
+
 function Parser:parse_stmt()
   local tok = self:peek()
   
@@ -1567,6 +1580,7 @@ function Parser:parse_stmt()
     self:expect("KEYWORD", "end")
     return ast_do_block(body)
   end
+
   -- Repeat...until loop
   if tok.type == "KEYWORD" and tok.value == "repeat" then
     self:advance()
@@ -1575,17 +1589,20 @@ function Parser:parse_stmt()
     local cond = self:parse_expr()
     return ast_repeat(body, cond)
   end
+
   -- Break
   if tok.type == "KEYWORD" and tok.value == "break" then
     self:advance()
     return ast_break()
   end
+
   -- Goto label
   if tok.type == "KEYWORD" and tok.value == "goto" then
     self:advance()
     local label = self:expect("IDENT").value
     return ast_goto(label)
   end
+
   -- Label ::name::
   if tok.type == "OP" and tok.value == "::" then
     self:advance()
@@ -1606,6 +1623,7 @@ function Parser:parse_stmt()
   -- Must be a call (single expression)
   return targets[1]
 end
+
 function Parser:parse_param_list()
   local params = {}
   local tok = self:peek()
@@ -1626,6 +1644,7 @@ function Parser:parse_param_list()
   end
   return params
 end
+
 function Parser:parse_expr_list()
   local exprs = {}
   exprs[#exprs + 1] = self:parse_expr()
@@ -1634,9 +1653,11 @@ function Parser:parse_expr_list()
   end
   return exprs
 end
+
 function Parser:parse_expr()
   return self:parse_or_expr()
 end
+
 function Parser:parse_or_expr()
   local left = self:parse_and_expr()
   while self:match("KEYWORD", "or") do
@@ -1645,6 +1666,7 @@ function Parser:parse_or_expr()
   end
   return left
 end
+
 function Parser:parse_and_expr()
   local left = self:parse_cmp_expr()
   while self:match("KEYWORD", "and") do
@@ -1653,6 +1675,7 @@ function Parser:parse_and_expr()
   end
   return left
 end
+
 function Parser:parse_cmp_expr()
   local left = self:parse_bor_expr()
   local ops_map = {["=="]="==",["~="]="~=",[">"]=">",["<"]="<",[">="]=">=",["<="]="<="}
@@ -1664,6 +1687,7 @@ function Parser:parse_cmp_expr()
   end
   return left
 end
+
 function Parser:parse_bor_expr()
   local left = self:parse_xor_expr()
   while self:match("OP", "|") do
@@ -1672,6 +1696,7 @@ function Parser:parse_bor_expr()
   end
   return left
 end
+
 function Parser:parse_xor_expr()
   local left = self:parse_band_expr()
   while self:match("OP", "~") do
@@ -1680,6 +1705,7 @@ function Parser:parse_xor_expr()
   end
   return left
 end
+
 function Parser:parse_band_expr()
   local left = self:parse_shift_expr()
   while self:match("OP", "&") do
@@ -1688,6 +1714,7 @@ function Parser:parse_band_expr()
   end
   return left
 end
+
 function Parser:parse_shift_expr()
   local left = self:parse_concat_expr()
   while true do
@@ -1702,6 +1729,7 @@ function Parser:parse_shift_expr()
   end
   return left
 end
+
 function Parser:parse_concat_expr()
   local left = self:parse_add_expr()
   while self:match("OP", "..") do
@@ -1710,6 +1738,7 @@ function Parser:parse_concat_expr()
   end
   return left
 end
+
 function Parser:parse_add_expr()
   local left = self:parse_mul_expr()
   while true do
@@ -1724,6 +1753,7 @@ function Parser:parse_add_expr()
   end
   return left
 end
+
 function Parser:parse_mul_expr()
   local left = self:parse_unary_expr()
   while true do
@@ -1738,6 +1768,7 @@ function Parser:parse_mul_expr()
   end
   return left
 end
+
 function Parser:parse_unary_expr()
   local tok = self:peek()
   if tok.type == "KEYWORD" and tok.value == "not" then
@@ -1758,6 +1789,7 @@ function Parser:parse_unary_expr()
   end
   return self:parse_pow_expr()
 end
+
 function Parser:parse_pow_expr()
   local left = self:parse_primary_expr()
   if self:match("OP", "^") then
@@ -1766,6 +1798,7 @@ function Parser:parse_pow_expr()
   end
   return left
 end
+
 function Parser:parse_primary_expr()
   local tok = self:peek()
   local node
@@ -1864,6 +1897,7 @@ function Parser:parse_primary_expr()
   end
   return node
 end
+
 function Parser:parse_table_constructor()
   self:expect("OP", "{")
   local fields = {}
@@ -1903,11 +1937,13 @@ function Parser:parse_table_constructor()
   self:expect("OP", "}")
   return ast_table(fields)
 end
+
 ------------------------------------------------------------
 -- 字节码编译器
 ------------------------------------------------------------
 local Compiler = {}
 Compiler.__index = Compiler
+
 function Compiler.new(parent)
   return setmetatable({
     code = {},
@@ -1922,14 +1958,17 @@ function Compiler.new(parent)
     parent = parent,  -- parent scope for upvalue access
   }, Compiler)
 end
+
 function Compiler:emit(op, a, b, c)
   self.code[#self.code + 1] = { op = op, a = a or 0, b = b or 0, c = c or 0, sBx = b }
   return #self.code
 end
+
 function Compiler:emit_sbx(op, a, sbx)
   self.code[#self.code + 1] = { op = op, a = a or 0, b = sbx or 0, c = 0, sBx = sbx or 0 }
   return #self.code
 end
+
 function Compiler:add_const(val)
   local key = type(val) == "string" and ("S:" .. val) or ("N:" .. tostring(val))
   if not self.const_map[key] then
@@ -1938,10 +1977,12 @@ function Compiler:add_const(val)
   end
   return self.const_map[key]
 end
+
 function Compiler:alloc_reg()
   self.reg_count = self.reg_count + 1
   return self.reg_count - 1
 end
+
 -- Find existing upvalue for a variable name, or create a new one
 function Compiler:find_or_create_upvalue(var_name)
   -- Check if we already have an upvalue for this variable
@@ -1955,16 +1996,19 @@ function Compiler:find_or_create_upvalue(var_name)
   self.upvalues[uv_idx] = { reg = self.parent.var_regs[var_name], name = var_name }
   return uv_idx - 1  -- Return 0-based index for the VM
 end
+
 function Compiler:free_reg(r)
   if r == self.reg_count - 1 then
     self.reg_count = self.reg_count - 1
   end
 end
+
 function Compiler:compile_block(block)
   for _, stmt in ipairs(block.stmts) do
     self:compile_stmt(stmt)
   end
 end
+
 function Compiler:compile_stmt(stmt)
   if stmt.type == "assign" then
     self:compile_assign(stmt)
@@ -2008,6 +2052,7 @@ function Compiler:compile_stmt(stmt)
     self:compile_func_def(stmt)
   end
 end
+
 function Compiler:compile_assign(stmt)
   -- Evaluate all values first, copying to fresh temp registers
   -- This prevents overlap when target register == source register
@@ -2050,6 +2095,7 @@ function Compiler:compile_assign(stmt)
     end
   end
 end
+
 function Compiler:compile_local(stmt)
   local regs = {}
   for i, name in ipairs(stmt.names) do
@@ -2103,6 +2149,7 @@ function Compiler:compile_local(stmt)
     end
   end
 end
+
 function Compiler:compile_if(stmt)
   -- Check if condition is a comparison that can be optimized
   if stmt.cond.type == "binop" and ({["=="]=1,["~="]=1,["<"]=1,[">"]=1,["<="]=1,[">="]=1})[stmt.cond.op] then
@@ -2147,6 +2194,7 @@ function Compiler:compile_if(stmt)
     end
   end
 end
+
 function Compiler:compile_while(stmt)
   -- Push break JMP list for this loop
   self.break_jmps[#self.break_jmps + 1] = {}
@@ -2168,6 +2216,7 @@ function Compiler:compile_while(stmt)
     self.code[bj].b = #self.code - bj
   end
 end
+
 function Compiler:compile_repeat(stmt)
   self.break_jmps[#self.break_jmps + 1] = {}
   local loop_pc = #self.code + 1
@@ -2185,6 +2234,7 @@ function Compiler:compile_repeat(stmt)
     self.code[bj].b = #self.code - bj
   end
 end
+
 function Compiler:compile_for_num(stmt)
   -- Numeric for with correct step sign handling (including negative steps).
   -- Uses FORPREP/FORLOOP layout:
@@ -2197,27 +2247,32 @@ function Compiler:compile_for_num(stmt)
     step_r = self:alloc_reg()
     self:emit(OPC.LOADK, step_r, self:add_const(1), 0)
   end
+
   local base = self.reg_count
   self.reg_count = self.reg_count + 4
   local limit_slot = base + 1
   local step_slot = base + 2
   local ext_r = base + 3
+
   self:emit(OPC.MOVE, base, init_r, 0)
   self:emit(OPC.MOVE, limit_slot, limit_r, 0)
   self:emit(OPC.MOVE, step_slot, step_r, 0)
   self.var_regs[stmt.name] = ext_r
+
   -- FORPREP: idx = idx - step; jump to FORLOOP
   local prep_pc = self:emit_sbx(OPC.FORPREP, base, 0)
   local body_pc = #self.code + 1
   self:compile_block(stmt.body)
   -- FORLOOP: idx = idx + step; if in range, store ext idx and jump back to body
   local loop_pc = self:emit_sbx(OPC.FORLOOP, base, 0)
+
   -- FORLOOP back to body: body = loop + 1 + sBx => sBx = body - loop - 1
   self.code[loop_pc].sBx = body_pc - loop_pc - 1
   self.code[loop_pc].b = body_pc - loop_pc - 1
   -- FORPREP to FORLOOP: loop = prep + 1 + sBx => sBx = loop - prep - 1
   self.code[prep_pc].sBx = loop_pc - prep_pc - 1
   self.code[prep_pc].b = loop_pc - prep_pc - 1
+
   local breaks = table.remove(self.break_jmps)
   for _, bj in ipairs(breaks) do
     self.code[bj].sBx = #self.code - bj
@@ -2227,6 +2282,7 @@ function Compiler:compile_for_num(stmt)
   self:free_reg(limit_r)
   self:free_reg(step_r)
 end
+
 function Compiler:compile_for_in(stmt)
   -- for k, v, ... in iter_expr do body end
   --
@@ -2244,8 +2300,10 @@ function Compiler:compile_for_in(stmt)
   --   TFORCALL A, C: R[A+3..A+2+C] = R[A](R[A+1], R[A+2])
   --   TFORLOOP A, sBx: if R[A+3] ~= nil then R[A+2]=R[A+3]; jump back
   --
+
   self.break_jmps[#self.break_jmps + 1] = {}
   local nvars = #stmt.names
+
   -- Allocate ALL registers contiguously: base, state, ctrl, var1, var2, ...
   -- This ensures they are at R[A], R[A+1], R[A+2], R[A+3], R[A+4], ...
   local base_r = self:alloc_reg()  -- R[A]: iterator function
@@ -2255,10 +2313,12 @@ function Compiler:compile_for_in(stmt)
   for i = 1, nvars do
     var_regs[i] = self:alloc_reg() -- R[A+3], R[A+4], ...
   end
+
   -- Set variable names to point to TFORCALL output registers
   for i, name in ipairs(stmt.names) do
     self.var_regs[name] = var_regs[i]
   end
+
   -- Now compile iterator expression (may allocate/free temp regs above our range)
   if #stmt.iter_expr == 1 and stmt.iter_expr[1].type == 'call' then
     local call_expr = stmt.iter_expr[1]
@@ -2281,29 +2341,37 @@ function Compiler:compile_for_in(stmt)
     self:emit(OPC.LOADNIL, state_r, 0, 0)
     self:emit(OPC.LOADNIL, ctrl_r, 0, 0)
   end
+
   -- Update reg_count to account for TFORCALL output registers
   local max_used = base_r + 2 + nvars
   if max_used > self.reg_count then
     self.reg_count = max_used
   end
+
   -- TFORCALL: R[A+3..A+2+C] = R[A](R[A+1], R[A+2])
   local tforcall_pc = #self.code + 1
   self:emit(OPC.TFORCALL, base_r, 0, nvars)
+
   -- TFORLOOP: if R[A+3] ~= nil then R[A+2]=R[A+3]; jump to loop body
   --           if R[A+3] == nil then fall through (exit loop)
   local tforloop_pc = self:emit_sbx(OPC.TFORLOOP, base_r, 0)
+
   -- If nil, jump to exit
   local exit_jmp = self:emit_sbx(OPC.JMP, 0, 0)
+
   -- Loop body
   local body_start = #self.code + 1
   self:compile_block(stmt.body)
+
   -- Jump back to TFORCALL
   local back_jmp = self:emit_sbx(OPC.JMP, 0, 0)
   self.code[back_jmp].b = tforcall_pc - back_jmp - 1
   self.code[back_jmp].sBx = tforcall_pc - back_jmp - 1
+
   -- Fix TFORLOOP: jump to body_start
   self.code[tforloop_pc].sBx = body_start - tforloop_pc - 1
   self.code[tforloop_pc].b = body_start - tforloop_pc - 1
+
   -- Fix exit jump: jump to after loop
   self.code[exit_jmp].sBx = #self.code - exit_jmp
   self.code[exit_jmp].b = #self.code - exit_jmp
@@ -2313,6 +2381,7 @@ function Compiler:compile_for_in(stmt)
     self.code[bj].sBx = #self.code - bj
     self.code[bj].b = #self.code - bj
   end
+
   -- Free registers
   for i = 1, nvars do
     self:free_reg(var_regs[i])
@@ -2321,6 +2390,7 @@ function Compiler:compile_for_in(stmt)
   self:free_reg(state_r)
   self:free_reg(ctrl_r)
 end
+
 function Compiler:compile_return(stmt)
   if stmt.values and #stmt.values > 0 then
     if #stmt.values == 1 then
@@ -2339,6 +2409,7 @@ function Compiler:compile_return(stmt)
     self:emit(OPC.RETURN, 0, 1, 0)
   end
 end
+
 function Compiler:resolve_gotos()
   for _, g in ipairs(self.goto_jmps) do
     local target = self.labels[g.label]
@@ -2350,6 +2421,7 @@ function Compiler:resolve_gotos()
   end
   self.goto_jmps = {}
 end
+
 function Compiler:compile_func_def(stmt)
   -- Compile function body in a sub-compiler with parent scope
   local sub = Compiler.new(self)
@@ -2388,6 +2460,7 @@ function Compiler:compile_func_def(stmt)
   
   return r
 end
+
 function Compiler:compile_expr(expr)
   if expr.type == "number" then
     local r = self:alloc_reg()
@@ -2414,6 +2487,7 @@ function Compiler:compile_expr(expr)
     self:emit(OPC.LOADNIL, r, 0, 0)
     return r
   end
+
   if expr.type == "vararg" then
     local r = self:alloc_reg()
     self:emit(OPC.VARARG, r, 2, 0)  -- B=2 means 1 result
@@ -2606,6 +2680,7 @@ function Compiler:compile_expr(expr)
   self:emit(OPC.LOADNIL, r, 0, 0)
   return r
 end
+
 function Compiler:get_proto()
   return {
     code = self.code,
@@ -2614,11 +2689,13 @@ function Compiler:get_proto()
     maxstack = self.reg_count + 1,
   }
 end
+
 ------------------------------------------------------------
 -- 字节码编码（混淆 + 加密）
 ------------------------------------------------------------
 -- 字节码编码（op 池映射 + 字符池 + 整表加密）
 ------------------------------------------------------------
+
 local OPC_NAMES = {
   {"NOP", 0}, {"LOADK", 1}, {"LOADBOOL", 2}, {"LOADNIL", 3},
   {"MOVE", 4}, {"GETGLOBAL", 5}, {"SETGLOBAL", 6},
@@ -2635,6 +2712,7 @@ local OPC_NAMES = {
   {"EXTRARG", 43}, {"GETUPVAL", 44}, {"SETUPVAL", 45},
   {"IDIV", 55},
 }
+
 local function shuffle_list(t)
   for i = #t, 2, -1 do
     local j = math.random(1, i)
@@ -2642,6 +2720,7 @@ local function shuffle_list(t)
   end
   return t
 end
+
 local function build_op_map()
   local n = #OPC_NAMES
   local runtime_ids = {}
@@ -2657,9 +2736,11 @@ local function build_op_map()
   end
   return op_map, name_to_rt
 end
+
 local function build_char_pool(proto)
   local seen = {}
   local pool = {}
+
   local function add_bytes(s)
     if type(s) ~= "string" then return end
     for i = 1, #s do
@@ -2670,6 +2751,7 @@ local function build_char_pool(proto)
       end
     end
   end
+
   local function walk(p)
     for _, k in ipairs(p.constants or {}) do
       if type(k) == "string" then
@@ -2685,6 +2767,7 @@ local function build_char_pool(proto)
     end
   end
   walk(proto)
+
   for _ = 1, math.random(4, 16) do
     local b = math.random(0, 255)
     if not seen[b] then
@@ -2696,6 +2779,7 @@ local function build_char_pool(proto)
     pool[1] = 0
   end
   shuffle_list(pool)
+
   local byte_to_idx = {}
   for i, b in ipairs(pool) do
     byte_to_idx[b] = i
@@ -2707,6 +2791,7 @@ local function build_char_pool(proto)
   end
   return encrypted, byte_to_idx, pool_key
 end
+
 local function encode_string_via_pool(s, byte_to_idx, parts)
   parts[#parts + 1] = #s
   for i = 1, #s do
@@ -2714,12 +2799,14 @@ local function encode_string_via_pool(s, byte_to_idx, parts)
     parts[#parts + 1] = byte_to_idx[b] or 1
   end
 end
+
 local function encode_proto(proto, key, op_map, byte_to_idx)
   local parts = {}
   parts[#parts + 1] = proto.numparams
   parts[#parts + 1] = proto.maxstack
   parts[#parts + 1] = #proto.constants
   parts[#parts + 1] = #proto.code
+
   for _, k in ipairs(proto.constants) do
     if type(k) == "number" then
       parts[#parts + 1] = 1
@@ -2738,18 +2825,21 @@ local function encode_proto(proto, key, op_map, byte_to_idx)
     end
   end
   parts[#parts + 1] = 0
+
   for _, instr in ipairs(proto.code) do
     parts[#parts + 1] = op_map[instr.op] or instr.op
     parts[#parts + 1] = instr.a
     parts[#parts + 1] = instr.b
     parts[#parts + 1] = instr.c
   end
+
   local uvs = proto.upvalues or {}
   parts[#parts + 1] = #uvs
   for _, uv in ipairs(uvs) do
     parts[#parts + 1] = uv.reg
     encode_string_via_pool(uv.name or "", byte_to_idx, parts)
   end
+
   for i, v in ipairs(parts) do
     if type(v) == "number" and v < 0 then
       parts[i] = v & 0xFFFFFFFF
@@ -2757,10 +2847,12 @@ local function encode_proto(proto, key, op_map, byte_to_idx)
   end
   return parts
 end
+
 local function generate_vm_source(proto, key)
   local op_map, name_to_rt = build_op_map()
   local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
   local encoded = encode_proto(proto, key, op_map, byte_to_idx)
+
   local seed = math.random(1000, 9999)
   local cs = seed
   for i, v in ipairs(encoded) do cs = (cs + v * (i + seed)) % 65536 end
@@ -2769,6 +2861,7 @@ local function generate_vm_source(proto, key)
   end
   local data_str = table.concat(encoded, ",")
   local chars_str = table.concat(char_pool_enc, ",")
+
   local names_order = {
     "NOP","LOADK","LOADBOOL","LOADNIL","MOVE","GETGLOBAL","SETGLOBAL",
     "GETUPVAL","SETUPVAL","GETTABLE","SETTABLE","NEWTABLE",
@@ -2784,6 +2877,7 @@ local function generate_vm_source(proto, key)
     op_locals[#op_locals + 1] = string.format("  local OP_%s = %d", nm, name_to_rt[nm] or 0)
   end
   local op_locals_str = table.concat(op_locals, "\n")
+
   -- Template uses %% for literal % in string.format
   local tpl = [====[
 -- VM Protected Code (op-pool + char-pool)
@@ -2794,7 +2888,9 @@ do
   local _ck = %d
   local _cs_seed = %d
   local _cs_expect = %d
+
   for _i = 1, #_d do _d[_i] = _d[_i] ~ _k end
+
   local function _dec_str(di, len)
     local t = {}
     for i = 1, len do
@@ -2803,7 +2899,9 @@ do
     end
     return table.concat(t), di
   end
+
 %s
+
   local function decode_proto(di)
     local np = _d[di]; di = di + 1
     local ms = _d[di]; di = di + 1
@@ -2845,8 +2943,22 @@ do
     end
     return { code = code, constants = consts, numparams = np, maxstack = ms, upvalues = upvalues }, di
   end
+
   local _orig_pack = _G._pack
+
+  local function exec_proto(proto, regs, base, nargs, upvals, varargs)
+    _G._pack = function()
+      local t = {}
+      if varargs then for i = 1, #varargs do t[i] = varargs[i] end end
+      return t
+    end
+    local code = proto.code
+    local consts = proto.constants
+    local pc = 1
+    local A, B, C
+
     local H = {}
+
     H[OP_NOP] = function() end
     H[OP_LOADK] = function()
       regs[base + A] = consts[B]
@@ -2881,8 +2993,22 @@ do
     end
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
+      local k = regs[base + C]
       if type(t) == "table" then
-        regs[base + A] = t[regs[base + C]]
+        regs[base + A] = t[k]
+      elseif type(t) == "string" and type(k) == "string" then
+        regs[base + A] = string[k]
+      elseif getmetatable(t) then
+        local mt = getmetatable(t)
+        if mt.__index then
+          if type(mt.__index) == "function" then
+            regs[base + A] = mt.__index(t, k)
+          else
+            regs[base + A] = mt.__index[k]
+          end
+        else
+          regs[base + A] = nil
+        end
       else
         regs[base + A] = nil
       end
@@ -3123,20 +3249,10 @@ do
       end
     end
     H[OP_EXTRARG] = function() end
+
     -- Safety: hard step limit prevents browser hang if bytecode is corrupted
     local _steps = 0
     local _max_steps = 5000000
-
-  local function exec_proto(proto, regs, base, nargs, upvals, varargs)
-    _G._pack = function()
-      local t = {}
-      if varargs then for i = 1, #varargs do t[i] = varargs[i] end end
-      return t
-    end
-    local code = proto.code
-    local consts = proto.constants
-    local pc = 1
-    local A, B, C
     while pc <= #code do
       _steps = _steps + 1
       if _steps > _max_steps then
@@ -3155,6 +3271,7 @@ do
       end
     end
   end
+
   local _cs = _cs_seed
   for _i = 1, #_d do
     _cs = (_cs + _d[_i] * (_i + _cs_seed)) & 0xFFFF
@@ -3162,22 +3279,27 @@ do
   if _cs ~= _cs_expect then
     error('integrity check failed')
   end
+
   local main_proto = decode_proto(1)
   local regs = {}
   exec_proto(main_proto, regs, 0, 0, nil)
   _G._pack = _orig_pack
 end
 ]====]
+
   return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)
 end
+
 local function vm_protect(source_code)
   math.randomseed(math.floor(os.time() + os.clock() * 10000))
   local function random_int(min, max)
     return math.random(min, max)
   end
+
   -- Parse
   local parser = Parser.new(source_code)
   local ast = parser:parse_block()
+
   -- Compile
   local compiler = Compiler.new()
   compiler:compile_block(ast)
@@ -3187,40 +3309,47 @@ local function vm_protect(source_code)
     compiler:emit(OPC.RETURN, 0, 1, 0)
   end
   local proto = compiler:get_proto()
+
   -- Generate VM
   local key = random_int(1, 0xFFFFFF)
   local vm_code = generate_vm_source(proto, key)
+
   return vm_code
 end
+
 ------------------------------------------------------------
 -- 导出
 ------------------------------------------------------------
 local M = {}
+
 function M.protect(source_code)
   return vm_protect(source_code)
 end
+
 function M.version()
   return VERSION
 end
+
 -- Debug: expose internals
 M._Parser = Parser
 M._Compiler = Compiler
 M._OPC = OPC
+
 ------------------------------------------------------------
 -- 函数级VM：生成可调用的VM chunk（返回 function）
 ------------------------------------------------------------
--- opts: nil → 生成 (function() do ... end end)() 形式
-local function 
-generate_function_vm(proto, key)
+local function generate_function_vm(proto, key)
   local op_map, name_to_rt = build_op_map()
   local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
   local encoded = encode_proto(proto, key, op_map, byte_to_idx)
+
   local seed = math.random(1000, 9999)
   local cs = seed
   for i, v in ipairs(encoded) do cs = (cs + v * (i + seed)) % 65536 end
   for i, v in ipairs(encoded) do encoded[i] = v ~ key end
   local data_str = table.concat(encoded, ",")
   local chars_str = table.concat(char_pool_enc, ",")
+
   local names_order = {
     "NOP","LOADK","LOADBOOL","LOADNIL","MOVE","GETGLOBAL","SETGLOBAL",
     "GETUPVAL","SETUPVAL","GETTABLE","SETTABLE","NEWTABLE",
@@ -3236,6 +3365,7 @@ generate_function_vm(proto, key)
     op_locals[#op_locals + 1] = string.format("  local OP_%s = %d", nm, name_to_rt[nm] or 0)
   end
   local op_locals_str = table.concat(op_locals, "\n")
+
   -- IIFE: do ... end end)()
   -- 内层 do...end 定义 VM 逻辑，return function(...) 返回最终可调用函数
   local tpl = [=====[
@@ -3246,7 +3376,9 @@ generate_function_vm(proto, key)
   local _ck = %d
   local _cs_seed = %d
   local _cs_expect = %d
+
   for _i = 1, #_d do _d[_i] = _d[_i] ~ _k end
+
   local function _dec_str(di, len)
     local t = {}
     for i = 1, len do
@@ -3255,7 +3387,9 @@ generate_function_vm(proto, key)
     end
     return table.concat(t), di
   end
+
 %s
+
   local function _decode_proto(di)
     local np = _d[di]; di = di + 1
     local ms = _d[di]; di = di + 1
@@ -3292,6 +3426,7 @@ generate_function_vm(proto, key)
     end
     return { code=code, constants=consts, numparams=np, maxstack=ms }, di
   end
+
   local function _exec_proto(proto, regs, base, nargs, upvals, varargs)
     _G._pack = function()
       local t = {}
@@ -3302,6 +3437,7 @@ generate_function_vm(proto, key)
     local consts = proto.constants
     local pc = 1
     local A, B, C
+
     local H = {}
     H[OP_NOP] = function() end
     H[OP_LOADK] = function() regs[base + A] = consts[B] end
@@ -3329,7 +3465,25 @@ generate_function_vm(proto, key)
     end
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
-      regs[base + A] = (type(t) == "table") and t[regs[base + C]] or nil
+      local k = regs[base + C]
+      if type(t) == "table" then
+        regs[base + A] = t[k]
+      elseif type(t) == "string" and type(k) == "string" then
+        regs[base + A] = string[k]
+      elseif getmetatable(t) then
+        local mt = getmetatable(t)
+        if mt.__index then
+          if type(mt.__index) == "function" then
+            regs[base + A] = mt.__index(t, k)
+          else
+            regs[base + A] = mt.__index[k]
+          end
+        else
+          regs[base + A] = nil
+        end
+      else
+        regs[base + A] = nil
+      end
     end
     H[OP_SETTABLE] = function()
       local t = regs[base + A]
@@ -3533,6 +3687,7 @@ generate_function_vm(proto, key)
       end
     end
   end
+
   local _cs = _cs_seed
   for _i = 1, #_d do
     _cs = (_cs + _d[_i] * (_i + _cs_seed)) & 0xFFFF
@@ -3540,10 +3695,13 @@ generate_function_vm(proto, key)
   if _cs ~= _cs_expect then
     error("integrity check failed")
   end
+
   local _main_proto = _decode_proto(1)
+
   -- 生成可调用函数
   local _np = _main_proto.numparams or 0
   local _hv = _main_proto.has_vararg or false
+
   return function(...)
     local _args = {...}
     local _nargs = select("#", ...)
@@ -3560,8 +3718,10 @@ generate_function_vm(proto, key)
 end
 end)()
 ]=====]
+
   return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)
 end
+
 --[[
 protect_as_expr(source_code, opts)
   解析 source_code，提取所有顶层 local 函数，逐一编译为 proto，
@@ -3569,19 +3729,24 @@ protect_as_expr(source_code, opts)
   opts.skip_globals: 不保护涉及全局读写的函数（默认 true）
   opts.max_functions: 最大保护函数数量（默认 50）
 ]]
+
 local function protect_as_expr(source_code, opts)
   opts = opts or {}
   local skip_globals = opts.skip_globals ~= false
   local max_functions = opts.max_functions or 50
+
   math.randomseed(math.floor(os.time() + os.clock() * 10000))
   local function random_int(min, max)
     return math.random(min, max)
   end
+
   local parser = Parser.new(source_code)
   local ast = parser:parse_block()
+
   -- 收集顶层 local function
   local func_stmts = {}
   local other_stmts = {}
+
   for _, stmt in ipairs(ast.stmts) do
     if stmt.type == "func_def" and stmt.is_local then
       func_stmts[#func_stmts + 1] = stmt
@@ -3589,16 +3754,20 @@ local function protect_as_expr(source_code, opts)
       other_stmts[#other_stmts + 1] = stmt
     end
   end
+
   if #func_stmts == 0 then return source_code end
+
   if #func_stmts > max_functions then
     for i = max_functions + 1, #func_stmts do
       other_stmts[#other_stmts + 1] = func_stmts[i]
     end
     for i = #func_stmts, max_functions + 1, -1 do func_stmts[i] = nil end
   end
+
   -- 逐函数生成 VM stub
   local stubs = {}
   local vm_decls = {}
+
   for idx, func_stmt in ipairs(func_stmts) do
     local name = func_stmt.name
     local sub = Compiler.new(nil)
@@ -3631,6 +3800,7 @@ local function protect_as_expr(source_code, opts)
     stubs[name] = stub_name
     vm_decls[#vm_decls + 1] = "local " .. stub_name .. " = " .. vm_chunk
   end
+
   -- 代码生成
   local function emit_expr(e)
     if not e then return "nil" end
@@ -3668,6 +3838,7 @@ local function protect_as_expr(source_code, opts)
       return "function(" .. table.concat(args, ", ") .. ") end"
     else return "nil" end
   end
+
   local function emit_stmt(s, indent)
     indent = indent or "  "
     if s.type == "assign" then
@@ -3727,10 +3898,12 @@ local function protect_as_expr(source_code, opts)
       return indent .. "-- " .. (s.type or "unknown")
     end
   end
+
   local out_lines = {}
   for _, decl in ipairs(vm_decls) do
     out_lines[#out_lines + 1] = decl
   end
+
   -- 顶层函数替换为哑实现
   for _, func_stmt in ipairs(func_stmts) do
     local name = func_stmt.name
@@ -3740,15 +3913,20 @@ local function protect_as_expr(source_code, opts)
     out_lines[#out_lines + 1] = "  return " .. stub .. "(" .. params_str .. ")"
     out_lines[#out_lines + 1] = "end"
   end
+
   -- 非函数语句
   for _, stmt in ipairs(other_stmts) do
     out_lines[#out_lines + 1] = emit_stmt(stmt, "")
   end
+
   return table.concat(out_lines, "\n")
 end
+
 function M.protect_as_expr(source_code, opts)
   return protect_as_expr(source_code, opts)
 end
+
+
 return M
 ]=], "@passes/vm.lua")()
   end
@@ -4736,6 +4914,14 @@ end
 ------------------------------------------------------------
 -- Operand classification (with mask passed in)
 ------------------------------------------------------------
+local function contains_comma(s)
+  for i = 1, #s do
+    local c = s:byte(i)
+    if c == 44 then return true end  -- comma
+  end
+  return false
+end
+
 local function classify_left(line, le, mask)
   if le < 1 then return nil end
   local ch = line:sub(le, le)
@@ -4749,6 +4935,9 @@ local function classify_left(line, le, mask)
         depth = depth - 1
         if depth == 0 then
           if not free_range(mask, j, le) then return nil end
+          local inner = line:sub(j + 1, le - 1)
+          -- Reject comma expressions which break semantics
+          if contains_comma(inner) then return nil end
           return "parens", line:sub(j, le), j
         end
       end
@@ -4795,6 +4984,9 @@ local function classify_right(line, rs, n, mask)
         depth = depth - 1
         if depth == 0 then
           if not free_range(mask, rs, j) then return nil end
+          local inner = line:sub(rs + 1, j - 1)
+          -- Reject comma expressions which break semantics
+          if contains_comma(inner) then return nil end
           return "parens", line:sub(rs, j), j
         end
       end
@@ -4847,11 +5039,19 @@ end
 ------------------------------------------------------------
 -- Boundary safety
 ------------------------------------------------------------
+-- Check if char is part of an identifier (letter/digit/underscore)
+local function is_ident_char(c)
+  return c:match("[%a_]") or c:match("[%d]")
+end
+
 local function safe_left(line, ls)
   local p = ls - 1
   while p >= 1 and line:byte(p) and line:byte(p) <= 32 do p = p - 1 end
   if p < 1 then return true end
   local ch = line:sub(p, p)
+  -- If ch is part of identifier (e.g. "floor("), this is a function call
+  -- and we should NOT replace ops inside the parentheses
+  if is_ident_char(ch) then return false end
   return ch == "(" or ch == "[" or ch == "{" or ch == "," or ch == ";"
       or ch == "=" or ch:match("[%a_]")
 end
@@ -4956,6 +5156,23 @@ local function scan_not(line, mask, budget)
     if not free_range(mask, s, e) then
       pos = e + 1
     else
+      -- Skip if this not is already inside parentheses (already processed by scan_ops)
+      local paren_depth = 0
+      for i = s - 1, 1, -1 do
+        local c = line:sub(i, i)
+        if c == ")" then paren_depth = paren_depth + 1
+        elseif c == "(" then
+          if paren_depth > 0 then
+            paren_depth = paren_depth - 1
+          else
+            break  -- not is inside these parens, skip
+          end
+        elseif c:match("[%w_]") or c == " " or c == "\t" then
+          -- Continue scanning
+        else
+          break
+        end
+      end
       local rs = e + 1
       while rs <= n and line:byte(rs) and line:byte(rs) <= 32 do rs = rs + 1 end
       local _, rtxt, re = classify_right(line, rs, n, mask)
@@ -6286,13 +6503,13 @@ local PRESETS = {
      vm_function_auto_tag = false,
   },
   max = {
-    vm_protect = true, anti_debug = true,
+    vm_protect = false, anti_debug = true,
     string_encryption = true, variable_mangling = true,
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-     junk_comments = true, call_indirection = true, vm_function = true,
-     vm_function_auto_tag = true,
+    junk_comments = true, call_indirection = true, vm_function = true,
+    vm_function_auto_tag = true,
   },
 }
 
@@ -6679,6 +6896,10 @@ function M.set_config(options)
     end
     Config.preset = "custom"
   elseif has_pass_key then
+    -- Disable all pass keys first, then enable only the ones specified
+    for _, key in ipairs(PASS_KEYS) do
+      Config[key] = false
+    end
     for key, value in pairs(options) do
       if CONFIG_TO_PASS[key] ~= nil then
         Config[key] = value and true or false
@@ -6692,6 +6913,8 @@ function M.set_config(options)
   if options.string_whitelist ~= nil then
     Config.string_whitelist = copy_list(options.string_whitelist)
   end
+  -- Sync config changes to PassManager
+  sync_config_to_passes()
 end
 function M.apply_preset(name)
   return apply_preset(name)

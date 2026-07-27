@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -5716,8 +5716,22 @@ do
     end
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
+      local k = regs[base + C]
       if type(t) == "table" then
-        regs[base + A] = t[regs[base + C]]
+        regs[base + A] = t[k]
+      elseif type(t) == "string" and type(k) == "string" then
+        regs[base + A] = string[k]
+      elseif getmetatable(t) then
+        local mt = getmetatable(t)
+        if mt.__index then
+          if type(mt.__index) == "function" then
+            regs[base + A] = mt.__index(t, k)
+          else
+            regs[base + A] = mt.__index[k]
+          end
+        else
+          regs[base + A] = nil
+        end
       else
         regs[base + A] = nil
       end
@@ -5962,16 +5976,6 @@ do
     -- Safety: hard step limit prevents browser hang if bytecode is corrupted
     local _steps = 0
     local _max_steps = 5000000
-
-    -- VM Polymorphism: inject fake opcodes to increase analysis surface
-    do
-      local _fake_ops = {}
-      for _fi = 1, 8 do
-        local _op = math.random(200, 511)
-        _fake_ops[_fi] = _op
-        H[_op] = function() end
-      end
-    end
     while pc <= #code do
       _steps = _steps + 1
       if _steps > _max_steps then
@@ -6057,12 +6061,7 @@ M._OPC = OPC
 ------------------------------------------------------------
 -- 函数级VM：生成可调用的VM chunk（返回 function）
 ------------------------------------------------------------
--- opts: nil → 生成 (function() do ... end end)() 形式
-local function 
-
-
-
-generate_function_vm(proto, key)
+local function generate_function_vm(proto, key)
   local op_map, name_to_rt = build_op_map()
   local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
   local encoded = encode_proto(proto, key, op_map, byte_to_idx)
@@ -6189,7 +6188,25 @@ generate_function_vm(proto, key)
     end
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
-      regs[base + A] = (type(t) == "table") and t[regs[base + C]] or nil
+      local k = regs[base + C]
+      if type(t) == "table" then
+        regs[base + A] = t[k]
+      elseif type(t) == "string" and type(k) == "string" then
+        regs[base + A] = string[k]
+      elseif getmetatable(t) then
+        local mt = getmetatable(t)
+        if mt.__index then
+          if type(mt.__index) == "function" then
+            regs[base + A] = mt.__index(t, k)
+          else
+            regs[base + A] = mt.__index[k]
+          end
+        else
+          regs[base + A] = nil
+        end
+      else
+        regs[base + A] = nil
+      end
     end
     H[OP_SETTABLE] = function()
       local t = regs[base + A]
@@ -6379,16 +6396,6 @@ generate_function_vm(proto, key)
       end
     end
 
-
-    -- VM Polymorphism: inject fake opcodes to increase analysis surface
-    do
-      local _fake_ops = {}
-      for _fi = 1, 8 do
-        local _op = math.random(200, 511)
-        _fake_ops[_fi] = _op
-        H[_op] = function() end
-      end
-    end
     while pc <= #code do
       local ins = code[pc]
       local op = ins.op
@@ -6644,7 +6651,6 @@ end
 
 
 return M
-
 ]=], "@passes/vm.lua")()
   end
   package.preload["passes.vm_protect"] = function()
@@ -7631,6 +7637,14 @@ end
 ------------------------------------------------------------
 -- Operand classification (with mask passed in)
 ------------------------------------------------------------
+local function contains_comma(s)
+  for i = 1, #s do
+    local c = s:byte(i)
+    if c == 44 then return true end  -- comma
+  end
+  return false
+end
+
 local function classify_left(line, le, mask)
   if le < 1 then return nil end
   local ch = line:sub(le, le)
@@ -7644,6 +7658,9 @@ local function classify_left(line, le, mask)
         depth = depth - 1
         if depth == 0 then
           if not free_range(mask, j, le) then return nil end
+          local inner = line:sub(j + 1, le - 1)
+          -- Reject comma expressions which break semantics
+          if contains_comma(inner) then return nil end
           return "parens", line:sub(j, le), j
         end
       end
@@ -7690,6 +7707,9 @@ local function classify_right(line, rs, n, mask)
         depth = depth - 1
         if depth == 0 then
           if not free_range(mask, rs, j) then return nil end
+          local inner = line:sub(rs + 1, j - 1)
+          -- Reject comma expressions which break semantics
+          if contains_comma(inner) then return nil end
           return "parens", line:sub(rs, j), j
         end
       end
@@ -7742,11 +7762,19 @@ end
 ------------------------------------------------------------
 -- Boundary safety
 ------------------------------------------------------------
+-- Check if char is part of an identifier (letter/digit/underscore)
+local function is_ident_char(c)
+  return c:match("[%a_]") or c:match("[%d]")
+end
+
 local function safe_left(line, ls)
   local p = ls - 1
   while p >= 1 and line:byte(p) and line:byte(p) <= 32 do p = p - 1 end
   if p < 1 then return true end
   local ch = line:sub(p, p)
+  -- If ch is part of identifier (e.g. "floor("), this is a function call
+  -- and we should NOT replace ops inside the parentheses
+  if is_ident_char(ch) then return false end
   return ch == "(" or ch == "[" or ch == "{" or ch == "," or ch == ";"
       or ch == "=" or ch:match("[%a_]")
 end
@@ -7851,6 +7879,23 @@ local function scan_not(line, mask, budget)
     if not free_range(mask, s, e) then
       pos = e + 1
     else
+      -- Skip if this not is already inside parentheses (already processed by scan_ops)
+      local paren_depth = 0
+      for i = s - 1, 1, -1 do
+        local c = line:sub(i, i)
+        if c == ")" then paren_depth = paren_depth + 1
+        elseif c == "(" then
+          if paren_depth > 0 then
+            paren_depth = paren_depth - 1
+          else
+            break  -- not is inside these parens, skip
+          end
+        elseif c:match("[%w_]") or c == " " or c == "\\t" then
+          -- Continue scanning
+        else
+          break
+        end
+      end
       local rs = e + 1
       while rs <= n and line:byte(rs) and line:byte(rs) <= 32 do rs = rs + 1 end
       local _, rtxt, re = classify_right(line, rs, n, mask)
@@ -9181,13 +9226,13 @@ local PRESETS = {
      vm_function_auto_tag = false,
   },
   max = {
-    vm_protect = true, anti_debug = true,
+    vm_protect = false, anti_debug = true,
     string_encryption = true, variable_mangling = true,
     instruction_substitution = true, constant_encryption = true,
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
-     junk_comments = true, call_indirection = true, vm_function = true,
-     vm_function_auto_tag = true,
+    junk_comments = true, call_indirection = true, vm_function = true,
+    vm_function_auto_tag = true,
   },
 }
 
@@ -9574,6 +9619,10 @@ function M.set_config(options)
     end
     Config.preset = "custom"
   elseif has_pass_key then
+    -- Disable all pass keys first, then enable only the ones specified
+    for _, key in ipairs(PASS_KEYS) do
+      Config[key] = false
+    end
     for key, value in pairs(options) do
       if CONFIG_TO_PASS[key] ~= nil then
         Config[key] = value and true or false
@@ -9587,6 +9636,8 @@ function M.set_config(options)
   if options.string_whitelist ~= nil then
     Config.string_whitelist = copy_list(options.string_whitelist)
   end
+  -- Sync config changes to PassManager
+  sync_config_to_passes()
 end
 function M.apply_preset(name)
   return apply_preset(name)

@@ -1,4 +1,4 @@
-﻿// ================================================================
+// ================================================================
 // build_html.js
 // Sync obfuscator_bundle.lua into index.html's OBFUSCATOR_LUA section
 //
@@ -15,35 +15,36 @@ const path = require('path');
 const bundlePath = path.join(__dirname, 'obfuscator_bundle.lua');
 const htmlPath = path.join(__dirname, 'index.html');
 
-// --- Read bundle ---
-let bundle = fs.readFileSync(bundlePath, 'utf-8');
+// --- Read bundle as Buffer ---
+let bundle = fs.readFileSync(bundlePath);
 
-// Strip leading BOM / shebang only (never mid-file: would drop package.preload)
-if (bundle.charCodeAt(0) === 0xFEFF) bundle = bundle.slice(1);
-{
-  let i = 0;
-  while (i < bundle.length && /[ \t\r\n]/.test(bundle[i])) i++;
-  if (bundle.startsWith('#!', i)) {
-    const nl = bundle.indexOf('\n', i);
-    bundle = nl >= 0 ? bundle.slice(nl + 1) : '';
-  }
+// Strip leading UTF-8 BOM if present
+if (bundle[0] === 0xEF && bundle[1] === 0xBB && bundle[2] === 0xBF) {
+  bundle = bundle.slice(3);
 }
 
-// Escape for JS template literal:
-// 1) \ -> \\
-// 2) ` -> \`
-// 3) ${ -> \${
-const escaped = bundle
-  .replace(/\\/g, '\\\\')
-  .replace(/`/g, '\\`')
-  .replace(/\$\{/g, '\\${');
+// Strip leading shebang and whitespace
+let start = 0;
+while (start < bundle.length && (bundle[start] === 0x20 || bundle[start] === 0x09 ||
+       bundle[start] === 0x0D || bundle[start] === 0x0A)) start++;
+if (bundle[start] === 0x23 && bundle[start + 1] === 0x21) {  // #!
+  let nl = start;
+  while (nl < bundle.length && bundle[nl] !== 0x0A) nl++;
+  start = nl + 1;
+}
+if (start > 0) bundle = bundle.slice(start);
 
-// --- Read index.html ---
-let html = fs.readFileSync(htmlPath, 'utf-8');
+// --- Read index.html as Buffer ---
+let html = fs.readFileSync(htmlPath);
+
+// Strip UTF-8 BOM if present
+if (html[0] === 0xEF && html[1] === 0xBB && html[2] === 0xBF) {
+  html = html.slice(3);
+}
 
 // Find the OBFUSCATOR_LUA template literal section
-const startMarker = 'const OBFUSCATOR_LUA = `';
-const startPos = html.indexOf(startMarker);
+const startMarker = Buffer.from('const OBFUSCATOR_LUA = `');
+const startPos = indexOf(html, startMarker);
 if (startPos < 0) {
   console.error('ERROR: "const OBFUSCATOR_LUA = `" marker not found in index.html');
   process.exit(1);
@@ -52,29 +53,27 @@ if (startPos < 0) {
 const contentStart = startPos + startMarker.length;
 
 // Find the closing backtick of THIS template only.
-// Prefer the canonical terminator "`;\nconst FEATURES" / "`;\r\nconst FEATURES"
-// because inner unescaped backticks may exist in stale builds.
 let endPos = -1;
 const terminators = [
-  '`;\r\nconst FEATURES',
-  '`;\nconst FEATURES',
-  '`;\r\nconst FEATURES =',
-  '`;\nconst FEATURES =',
+  Buffer.from('`;\r\nconst FEATURES'),
+  Buffer.from('`;\nconst FEATURES'),
+  Buffer.from('`;\r\nconst FEATURES ='),
+  Buffer.from('`;\nconst FEATURES ='),
 ];
 for (const t of terminators) {
-  const idx = html.indexOf(t, contentStart);
+  const idx = indexOf(html, t, contentStart);
   if (idx >= 0) {
     endPos = idx;
     break;
   }
 }
 
-// Fallback: scan with escape awareness (for partially fixed files)
+// Fallback: scan for first unescaped backtick
 if (endPos < 0) {
   let pos = contentStart;
   while (pos < html.length) {
-    if (html[pos] === '\\') { pos += 2; continue; }
-    if (html[pos] === '`') { endPos = pos; break; }
+    if (html[pos] === 0x5C) { pos += 2; continue; }  // backslash escape
+    if (html[pos] === 0x60) { endPos = pos; break; }  // backtick
     pos++;
   }
 }
@@ -84,15 +83,40 @@ if (endPos < 0) {
   process.exit(1);
 }
 
-// Replace content between backticks
-const newHtml = html.substring(0, contentStart) + escaped + html.substring(endPos);
+// Escape bundle for JS template literal:
+// 1) \ -> \\
+// 2) ` -> \`
+// 3) ${ -> \${
+let escaped = bundle.toString('utf8')
+  .replace(/\\/g, '\\\\')
+  .replace(/`/g, '\\`')
+  .replace(/\$\{/g, '\\${');
 
-fs.writeFileSync(htmlPath, newHtml, 'utf-8');
+// Convert escaped string back to Buffer
+const escapedBuf = Buffer.from(escaped, 'utf8');
+
+// Build new HTML
+const before = html.slice(0, contentStart);
+const after = html.slice(endPos);
+const newHtml = Buffer.concat([before, escapedBuf, after]);
+
+fs.writeFileSync(htmlPath, newHtml);
 
 console.log('index.html updated:');
 console.log('  Old content length:', endPos - contentStart, 'chars');
 console.log('  New content length:', escaped.length, 'chars');
 console.log('  Bundle source length:', bundle.length, 'chars');
 console.log('  Backslash/backtick escapes added:', (escaped.length - bundle.length));
-console.log('  Escaped backticks:', (bundle.match(/`/g) || []).length);
-console.log('  Escaped ${:', (bundle.match(/\$\{/g) || []).length);
+
+// Helper: find pattern in Buffer
+function indexOf(buf, pattern, start) {
+  start = start || 0;
+  outer:
+  for (let i = start; i <= buf.length - pattern.length; i++) {
+    for (let j = 0; j < pattern.length; j++) {
+      if (buf[i + j] !== pattern[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
