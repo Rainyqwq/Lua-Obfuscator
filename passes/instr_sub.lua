@@ -89,6 +89,14 @@ end
 ------------------------------------------------------------
 -- Operand classification (with mask passed in)
 ------------------------------------------------------------
+local function contains_comma(s)
+  for i = 1, #s do
+    local c = s:byte(i)
+    if c == 44 then return true end  -- comma
+  end
+  return false
+end
+
 local function classify_left(line, le, mask)
   if le < 1 then return nil end
   local ch = line:sub(le, le)
@@ -102,6 +110,9 @@ local function classify_left(line, le, mask)
         depth = depth - 1
         if depth == 0 then
           if not free_range(mask, j, le) then return nil end
+          local inner = line:sub(j + 1, le - 1)
+          -- Reject comma expressions which break semantics
+          if contains_comma(inner) then return nil end
           return "parens", line:sub(j, le), j
         end
       end
@@ -148,6 +159,9 @@ local function classify_right(line, rs, n, mask)
         depth = depth - 1
         if depth == 0 then
           if not free_range(mask, rs, j) then return nil end
+          local inner = line:sub(rs + 1, j - 1)
+          -- Reject comma expressions which break semantics
+          if contains_comma(inner) then return nil end
           return "parens", line:sub(rs, j), j
         end
       end
@@ -200,11 +214,19 @@ end
 ------------------------------------------------------------
 -- Boundary safety
 ------------------------------------------------------------
+-- Check if char is part of an identifier (letter/digit/underscore)
+local function is_ident_char(c)
+  return c:match("[%a_]") or c:match("[%d]")
+end
+
 local function safe_left(line, ls)
   local p = ls - 1
   while p >= 1 and line:byte(p) and line:byte(p) <= 32 do p = p - 1 end
   if p < 1 then return true end
   local ch = line:sub(p, p)
+  -- If ch is part of identifier (e.g. "floor("), this is a function call
+  -- and we should NOT replace ops inside the parentheses
+  if is_ident_char(ch) then return false end
   return ch == "(" or ch == "[" or ch == "{" or ch == "," or ch == ";"
       or ch == "=" or ch:match("[%a_]")
 end
@@ -309,6 +331,23 @@ local function scan_not(line, mask, budget)
     if not free_range(mask, s, e) then
       pos = e + 1
     else
+      -- Skip if this not is already inside parentheses (already processed by scan_ops)
+      local paren_depth = 0
+      for i = s - 1, 1, -1 do
+        local c = line:sub(i, i)
+        if c == ")" then paren_depth = paren_depth + 1
+        elseif c == "(" then
+          if paren_depth > 0 then
+            paren_depth = paren_depth - 1
+          else
+            break  -- not is inside these parens, skip
+          end
+        elseif c:match("[%w_]") or c == " " or c == "\t" then
+          -- Continue scanning
+        else
+          break
+        end
+      end
       local rs = e + 1
       while rs <= n and line:byte(rs) and line:byte(rs) <= 32 do rs = rs + 1 end
       local _, rtxt, re = classify_right(line, rs, n, mask)

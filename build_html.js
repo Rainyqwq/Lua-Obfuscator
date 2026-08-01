@@ -108,6 +108,74 @@ console.log('  New content length:', escaped.length, 'chars');
 console.log('  Bundle source length:', bundle.length, 'chars');
 console.log('  Backslash/backtick escapes added:', (escaped.length - bundle.length));
 
+// ================================================================
+// Inline lib/fengari-web.js as a JS string constant so the Web Worker
+// can eval() it without a network fetch (which fails on file://).
+// Patch the UMD root from `window` to `self`: a blob Worker has no
+// `window`, but `self` is the global in both Workers and the main
+// thread (where self === window).
+// ================================================================
+const fengariPath = path.join(__dirname, 'lib', 'fengari-web.js');
+let fengariSrc = fs.readFileSync(fengariPath, 'utf8');
+
+// Strip leading UTF-8 BOM if present
+if (fengariSrc.charCodeAt(0) === 0xFEFF) {
+  fengariSrc = fengariSrc.slice(1);
+}
+
+// Patch the single UMD root injection: }(window,function(){ -> }(self,function(){
+const umdFrom = '(window,function(){';
+const umdTo = '(self,function(){';
+const umdCount = fengariSrc.split(umdFrom).length - 1;
+if (umdCount !== 1) {
+  console.error('ERROR: expected exactly 1 UMD root "(window,function(){" in fengari-web.js, found ' + umdCount);
+  process.exit(1);
+}
+fengariSrc = fengariSrc.replace(umdFrom, umdTo);
+
+// Escape for a JS template literal: \ -> \\, ` -> \`, ${ -> \${
+let fengariEscaped = fengariSrc
+  .replace(/\\/g, '\\\\')
+  .replace(/`/g, '\\`')
+  .replace(/\$\{/g, '\\${');
+
+// Re-read the freshly-written index.html and inject `const FENGARI_SOURCE = \`…\`;`
+// right after the <script src="lib/fengari-web.js"></script> tag.
+let html2 = fs.readFileSync(htmlPath);
+if (html2[0] === 0xEF && html2[1] === 0xBB && html2[2] === 0xBF) {
+  html2 = html2.slice(3);
+}
+
+const injectHead = Buffer.from('\n<script>\n// Inlined fengari source for the Web Worker (file://-safe; UMD root patched window->self)\nconst FENGARI_SOURCE = `');
+const injectTail = Buffer.from('`;\n</script>\n');
+
+// Idempotency: strip any previously-injected FENGARI_SOURCE block so re-running
+// build_html.js doesn't accumulate duplicates (a duplicate `const` would crash the page).
+html2 = stripInjected(html2, injectHead, injectTail);
+
+const fengariTag = Buffer.from('<script src="lib/fengari-web.js"></script>');
+const tagPos = indexOf(html2, fengariTag);
+if (tagPos < 0) {
+  console.error('ERROR: "<script src="lib/fengari-web.js"></script>" marker not found in index.html');
+  process.exit(1);
+}
+const injectPos = tagPos + fengariTag.length;
+
+const newHtml2 = Buffer.concat([
+  html2.slice(0, injectPos),
+  injectHead,
+  Buffer.from(fengariEscaped, 'utf8'),
+  injectTail,
+  html2.slice(injectPos),
+]);
+
+fs.writeFileSync(htmlPath, newHtml2);
+
+console.log('FENGARI_SOURCE inlined:');
+console.log('  fengari source length:', fengariSrc.length, 'chars');
+console.log('  inlined (escaped) length:', fengariEscaped.length, 'chars');
+console.log('  UMD root patched: window -> self (' + umdCount + ' occurrence)');
+
 // Helper: find pattern in Buffer
 function indexOf(buf, pattern, start) {
   start = start || 0;
@@ -119,4 +187,22 @@ function indexOf(buf, pattern, start) {
     return i;
   }
   return -1;
+}
+
+// Helper: remove a previously-injected block delimited by head..tail (inclusive).
+// Used to keep FENGARI_SOURCE injection idempotent across repeated builds.
+function stripInjected(buf, head, tail) {
+  const out = [];
+  let pos = 0;
+  while (true) {
+    const h = indexOf(buf, head, pos);
+    if (h < 0) break;
+    const t = indexOf(buf, tail, h + head.length);
+    if (t < 0) break; // unbalanced; leave the rest untouched
+    out.push(buf.slice(pos, h));
+    pos = t + tail.length;
+  }
+  if (pos === 0) return buf; // nothing stripped
+  out.push(buf.slice(pos));
+  return Buffer.concat(out);
 }

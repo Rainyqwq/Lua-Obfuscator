@@ -1,5 +1,6 @@
 -- Auto-generated bundle: all pass modules inlined
 do
+
   package.preload["pass_manager"] = function()
     return load([[-- ================================================================
 -- pass_manager.lua
@@ -322,6 +323,7 @@ end
 return PassManager
 ]], "@pass_manager.lua")()
   end
+
   package.preload["passes"] = function()
     return load([[-- ================================================================
 -- passes/init.lua
@@ -380,6 +382,66 @@ end
 return M
 ]], "@passes/init.lua")()
   end
+
+  package.preload["passes/init"] = function()
+    return load([[-- ================================================================
+-- passes/init.lua
+-- Pass 加载器
+--
+-- Author: Rainy_qwq
+-- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
+-- License: MIT
+-- ================================================================
+-- 扫描 passes/ 目录，加载所有 Pass 模块并注册到 PassManager
+--
+-- 用法：
+--   local PassManager = require("pass_manager")
+--   local pm = PassManager.new()
+--   require("passes").load_all(pm)
+
+local M = {}
+
+-- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
+-- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
+local BUILTIN = {
+  "passes.vm_function",
+  "passes.vm_protect",
+  "passes.anti_debug",
+  "passes.string_encrypt",
+  "passes.num_encrypt",
+  "passes.instr_sub",
+  "passes.var_mangle",
+  "passes.adv_fake_cf",
+ "passes.cf_flatten",
+ "passes.bcf",
+  "passes.bb_split",
+ "passes.junk_comment",
+  "passes.call_indirect",
+  "passes.header",
+}
+
+-- 加载所有内置 Pass 并注册到 PassManager
+function M.load_all(pm)
+  for _, name in ipairs(BUILTIN) do
+    local ok, pass = pcall(require, name)
+    if ok and type(pass) == "table" and pass.name then
+      pm:register(pass)
+    else
+      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
+    end
+  end
+  return pm
+end
+
+-- 注册单个自定义 Pass
+function M.register(pm, pass)
+  pm:register(pass)
+end
+
+return M
+]], "@passes/init.lua")()
+  end
+
   package.preload["passes.utils"] = function()
     return load([=[-- ================================================================
 -- passes/utils.lua
@@ -507,6 +569,7 @@ end
 return M
 ]=], "@passes/utils.lua")()
   end
+
   package.preload["passes.string_pool"] = function()
     return load([==[-- ================================================================
 -- passes/string_pool.lua
@@ -1065,6 +1128,7 @@ end
 return M
 ]==], "@passes/string_pool.lua")()
   end
+
   package.preload["passes.vm"] = function()
     return load([=[-- ================================================================
 -- vm.lua
@@ -2880,6 +2944,7 @@ local function generate_vm_source(proto, key)
 
   -- Template uses %% for literal % in string.format
   local tpl = [====[
+-- @vm (protected)
 -- VM Protected Code (op-pool + char-pool)
 do
   local _d = {%s}
@@ -3673,7 +3738,14 @@ local function generate_function_vm(proto, key)
       end
     end
 
+    -- Safety: hard step limit prevents browser hang if bytecode is corrupted
+    local _steps = 0
+    local _max_steps = 5000000
     while pc <= #code do
+      _steps = _steps + 1
+      if _steps > _max_steps then
+        error("VM step limit exceeded (possible infinite loop)")
+      end
       local ins = code[pc]
       local op = ins.op
       A, B, C = ins.a, ins.b, ins.c
@@ -3930,6 +4002,7 @@ end
 return M
 ]=], "@passes/vm.lua")()
   end
+
   package.preload["passes.vm_protect"] = function()
     return load([[-- ================================================================
 -- passes/vm_protect.lua
@@ -3970,6 +4043,7 @@ end
 return M
 ]], "@passes/vm_protect.lua")()
   end
+
   package.preload["passes.vm_function"] = function()
     return load([[local M={}
 M.name="vm_function";M.title="函数级VM保护";M.description="对指定顶层函数进行VM字节码虚拟化保护";M.version="2.10.0";M.author="Rainy_qwq";M.order=5;M.enabled=false
@@ -4028,67 +4102,57 @@ local function is_recursive(func_body, func_name)
 end
 
 function M.apply(code, ctx)
-  -- Strip UTF-8 BOM if present
   if code:sub(1,3) == "\239\187\191" then code = code:sub(4) end
-  -- Auto-tag: add --@vm before every top-level function when enabled
-  if ctx.config and ctx.config.vm_function_auto_tag then
-    local tagged = {}
-    for line in code:gmatch("[^\n]*\n?") do
-      if line:match("^local function ") or line:match("^function [a-zA-Z_][a-zA-Z0-9_]*%s*%(") then
-        table.insert(tagged, "--@vm\n")
-      end
-      table.insert(tagged, line)
-    end
-    code = table.concat(tagged)
-  end
 
   local vm=ctx.vm_module or require("passes.vm")
   local code_lines={}
   for line in code:gmatch("[^\n]*\n?")do code_lines[#code_lines+1]=line end
+
   local annotated={};local i=1
   while i<=#code_lines do
-    local line=code_lines[i]
-    if line:match("^%s*%-%-%s*@vm")then
-      local j=i+1
-      while j<=#code_lines and code_lines[j]:match("^%s*$")do j=j+1 end
-      local fl=code_lines[j]
-      local name=fl and fl:match("^%s*local%s+function%s+([%w_]+)")
-      if name then
-        local finish=find_function_end(code_lines,j)
-        if finish then annotated[#annotated+1]={start=i,finish=finish,name=name};i=finish+1 else i=i+1 end
-      else i=i+1 end
-    else i=i+1 end
+    local fl=code_lines[i]
+    local name=fl and fl:match("^%s*local%s+function%s+([%w_]+)")
+    if not name then
+      name=fl and fl:match("^%s*function%s+([%w_%.:]+)%s*%(")
+    end
+    if name then
+      local finish=find_function_end(code_lines,i)
+      if finish and finish > i then
+        annotated[#annotated+1]={start=i,finish=finish,name=name}
+        i=finish+1
+      else
+        i=i+1
+      end
+    else
+      i=i+1
+    end
   end
   if #annotated==0 then return code end
   local replacements={}
   for _,ann in ipairs(annotated)do
-    local fs={};for li=ann.start+1,ann.finish do fs[#fs+1]=code_lines[li]end
-    fs=table.concat(fs,"\n")
-    local bl={};local inf=false
-    for line in fs:gmatch("[^\n]*\n?")do
-      if not inf then if line:match("local%s+function%s+")then inf=true end end
-      if inf then bl[#bl+1]=line end
-    end
-    local bs=table.concat(bl,"\n")
+    local fs={};for li=ann.start,ann.finish do fs[#fs+1]=code_lines[li]end
+    local bs=table.concat(fs,"\n")
     if is_recursive(bs, ann.name) then
       replacements[#replacements+1]={start=ann.start,finish=ann.finish,new_src=nil}
     else
       local ok,vmr=pcall(vm.protect_as_expr,bs)
-      if not ok then error("VM函数保护失败 ["..ann.name.."]: "..tostring(vmr))end
-      replacements[#replacements+1]={start=ann.start,finish=ann.finish,new_src=vmr}
+      if not ok then
+        replacements[#replacements+1]={start=ann.start,finish=ann.finish,new_src=nil}
+      else
+        replacements[#replacements+1]={start=ann.start,finish=ann.finish,new_src=vmr}
+      end
     end
   end
   local out={};local cur=1
-  table.sort(replacements,function(a,b)return a.start>b.start end)
+  table.sort(replacements,function(a,b)return a.start<b.start end)
   for _,rep in ipairs(replacements)do
     while cur<rep.start do out[#out+1]=code_lines[cur];cur=cur+1 end
     if rep.new_src then
       cur=rep.finish+1
-      out[#out+1]="-- @vm (protected)"
       for line in rep.new_src:gmatch("[^\n]*\n?")do out[#out+1]=line end
     else
+      for li=rep.start,rep.finish do out[#out+1]=code_lines[li] end
       cur=rep.finish+1
-      out[#out+1]="-- @vm (skipped: recursive)"
     end
   end
   while cur<=#code_lines do out[#out+1]=code_lines[cur];cur=cur+1 end
@@ -4099,6 +4163,7 @@ return M
 
 ]], "@passes/vm_function.lua")()
   end
+
   package.preload["passes.string_encrypt"] = function()
     return load([[-- ================================================================
 -- passes/string_encrypt.lua
@@ -4134,6 +4199,7 @@ end
 return M
 ]], "@passes/string_encrypt.lua")()
   end
+
   package.preload["passes.var_mangle"] = function()
     return load([[-- ================================================================
 -- passes/var_mangle.lua
@@ -4225,6 +4291,7 @@ local function scan_identifiers(code)
     -- 标识符
     elseif is_id_start(b) then
       -- 跳过科学计数法中的 e/E(如 1.5e-3)
+      local is_scientific_e = false
       if (b == 101 or b == 69) and pos > 1 then  -- 'e' or 'E'
         local prev = code:byte(pos - 1)
         if is_digit(prev) or prev == BYTE_DOT then
@@ -4239,18 +4306,19 @@ local function scan_identifiers(code)
           while pos <= len and is_digit(code:byte(pos)) do
             pos = pos + 1
           end
-          goto continue_scan
+          is_scientific_e = true
         end
       end
-      local start = pos
-      pos = pos + 1
-      while pos <= len and is_id_char(code:byte(pos)) do
+      if not is_scientific_e then
+        local start = pos
         pos = pos + 1
+        while pos <= len and is_id_char(code:byte(pos)) do
+          pos = pos + 1
+        end
+        local name = code:sub(start, pos - 1)
+        n = n + 1
+        ids[n] = { name = name, start = start, stop = pos - 1 }
       end
-      local name = code:sub(start, pos - 1)
-      n = n + 1
-      ids[n] = { name = name, start = start, stop = pos - 1 }
-      ::continue_scan::
 
     else
       pos = pos + 1
@@ -4351,8 +4419,8 @@ local function collect_table_keys(code)
       local depth = 1
       while i <= len and depth > 0 do
         local cb = code:byte(i)
-        if cb == 91 then depth = depth + 1
-        elseif cb == 93 then depth = depth - 1
+        if cb == 91 then depth = depth + 1; i = i + 1
+        elseif cb == 93 then depth = depth - 1; i = i + 1
         elseif cb == 34 or cb == 39 then
           local q2 = cb; i = i + 1
           while i <= len do
@@ -4446,6 +4514,66 @@ function M.apply(code, ctx)
   local cfg = ctx.config or {}
   local whitelist = normalize_whitelist(cfg.whitelist)
 
+  -- 跳过 VM 保护的代码块（vm_function 生成的代码不应该被混淆）
+  -- 这些代码以 "-- @vm (protected)" 标记
+  local vm_blocks = {}
+  local vm_placeholders = {}
+  local block_idx = 1
+
+  -- 提取所有 VM 保护代码块
+  local function extract_vm_blocks(src)
+    local result = {}
+    local pos = 1
+    local len = #src
+
+    while pos <= len do
+      -- 查找 "-- @vm (protected)" 标记
+      -- NOTE: plain=true 时必须使用字面量，不能带 Lua pattern 转义。
+      local marker_start = src:find("-- @vm (protected)", pos, true)
+      if not marker_start then
+        -- 没有更多 VM 块，添加剩余内容
+        result[#result + 1] = src:sub(pos)
+        break
+      end
+
+      -- 添加标记之前的内容
+      if marker_start > pos then
+        result[#result + 1] = src:sub(pos, marker_start - 1)
+      end
+
+      -- 找到这个 VM 块的结束（下一个 "-- @" 标记或文件结束）
+      local block_end = src:find("\n-- @", marker_start + 1)
+      if not block_end then
+        block_end = len + 1
+      end
+
+      -- 提取 VM 代码块
+      local vm_code = src:sub(marker_start, block_end - 1)
+      local placeholder = "__VM_BLOCK_" .. block_idx .. "__"
+      vm_blocks[placeholder] = vm_code
+      vm_placeholders[#vm_placeholders + 1] = { pos = #table.concat(result) + 1, code = vm_code }
+
+      -- 用占位符替换
+      result[#result + 1] = "\n" .. placeholder .. "\n"
+      block_idx = block_idx + 1
+
+      pos = block_end
+    end
+
+    return table.concat(result)
+  end
+
+  -- 还原 VM 代码块
+  local function restore_vm_blocks(code)
+    for placeholder, vm_code in pairs(vm_blocks) do
+      code = code:gsub(placeholder, vm_code)
+    end
+    return code
+  end
+
+  -- 提取 VM 块，用占位符替换
+  code = extract_vm_blocks(code)
+
   -- 收集需要替换的变量名
   local table_keys = collect_table_keys(code)
   local var_map, ids = collect_local_vars(code, table_keys)
@@ -4488,12 +4616,16 @@ function M.apply(code, ctx)
     code = table.concat(segments)
   end
 
+  -- 还原 VM 代码块
+  code = restore_vm_blocks(code)
+
   return code
 end
 
 return M
 ]], "@passes/var_mangle.lua")()
   end
+
   package.preload["passes.num_encrypt"] = function()
     return load([[-- ================================================================
 -- passes/num_encrypt.lua
@@ -4823,6 +4955,7 @@ end
 
 return M]], "@passes/num_encrypt.lua")()
   end
+
   package.preload["passes.instr_sub"] = function()
     return load([[-- ================================================================
 -- passes/instr_sub.lua
@@ -5246,6 +5379,7 @@ end
 return M
 ]], "@passes/instr_sub.lua")()
   end
+
   package.preload["passes.adv_fake_cf"] = function()
     return load([[-- ================================================================
 -- passes/adv_fake_cf.lua
@@ -5351,6 +5485,7 @@ end
 return M
 ]], "@passes/adv_fake_cf.lua")()
   end
+
   package.preload["passes.cf_flatten"] = function()
     return load([[-- ================================================================
 -- passes/cf_flatten.lua
@@ -5534,6 +5669,7 @@ end
 return M
 ]], "@passes/cf_flatten.lua")()
   end
+
   package.preload["passes.bcf"] = function()
     return load([[-- ================================================================
 -- passes/bcf.lua
@@ -5695,6 +5831,7 @@ end
 
 return M]], "@passes/bcf.lua")()
   end
+
   package.preload["passes.bb_split"] = function()
     return load([[-- ================================================================
 -- passes/bb_split.lua
@@ -6014,6 +6151,7 @@ end
 return M
 ]], "@passes/bb_split.lua")()
   end
+
   package.preload["passes.junk_comment"] = function()
     return load([[-- ================================================================
 -- passes/junk_comment.lua
@@ -6101,6 +6239,7 @@ end
 return M
 ]], "@passes/junk_comment.lua")()
   end
+
   package.preload["passes.header"] = function()
     return load([[-- ================================================================
 -- passes/header.lua
@@ -6140,6 +6279,7 @@ end
 return M
 ]], "@passes/header.lua")()
   end
+
   package.preload["passes.anti_debug"] = function()
     return load([[-- passes/anti_debug.lua
 -- Anti-debugging detection pass
@@ -6200,6 +6340,7 @@ end
 return M
 ]], "@passes/anti_debug.lua")()
   end
+
   package.preload["passes.call_indirect"] = function()
     return load([[-- ================================================================
 -- passes/call_indirect.lua
@@ -6311,64 +6452,7 @@ end
 return M
 ]], "@passes/call_indirect.lua")()
   end
-  package.preload["passes.init"] = function()
-    return load([[-- ================================================================
--- passes/init.lua
--- Pass 加载器
---
--- Author: Rainy_qwq
--- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
--- License: MIT
--- ================================================================
--- 扫描 passes/ 目录，加载所有 Pass 模块并注册到 PassManager
---
--- 用法：
---   local PassManager = require("pass_manager")
---   local pm = PassManager.new()
---   require("passes").load_all(pm)
 
-local M = {}
-
--- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
--- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
-local BUILTIN = {
-  "passes.vm_function",
-  "passes.vm_protect",
-  "passes.anti_debug",
-  "passes.string_encrypt",
-  "passes.num_encrypt",
-  "passes.instr_sub",
-  "passes.var_mangle",
-  "passes.adv_fake_cf",
- "passes.cf_flatten",
- "passes.bcf",
-  "passes.bb_split",
- "passes.junk_comment",
-  "passes.call_indirect",
-  "passes.header",
-}
-
--- 加载所有内置 Pass 并注册到 PassManager
-function M.load_all(pm)
-  for _, name in ipairs(BUILTIN) do
-    local ok, pass = pcall(require, name)
-    if ok and type(pass) == "table" and pass.name then
-      pm:register(pass)
-    else
-      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
-    end
-  end
-  return pm
-end
-
--- 注册单个自定义 Pass
-function M.register(pm, pass)
-  pm:register(pass)
-end
-
-return M
-]], "@passes/init.lua")()
-  end
 end
 
 -- ================================================================
@@ -6472,15 +6556,14 @@ local CONFIG_TO_PASS = {
   junk_comments             = "junk_comments",
   anti_debug                = "anti_debug",
   call_indirection          = "call_indirection",
-   vm_function               = "vm_function",
-  vm_function_auto_tag     = "vm_function",
+  vm_function               = "vm_function",
 }
 
 local PASS_KEYS = {
   "vm_protect", "string_encryption", "variable_mangling",
   "instruction_substitution", "constant_encryption", "advanced_fake_cf",
   "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
-   "vm_function", "vm_function_auto_tag", "junk_comments", "anti_debug", "call_indirection",
+  "vm_function", "junk_comments", "anti_debug", "call_indirection",
 }
 
 -- Protection presets: fast / balanced / max
@@ -6492,7 +6575,6 @@ local PRESETS = {
     advanced_fake_cf = false, control_flow_flattening = false,
     bogus_control_flow = false, basic_block_splitting = false,
      junk_comments = true, call_indirection = false, vm_function = false,
-     vm_function_auto_tag = false,
   },
   balanced = {
     vm_protect = false, anti_debug = false,
@@ -6501,7 +6583,6 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
      junk_comments = true, call_indirection = true, vm_function = true,
-     vm_function_auto_tag = false,
   },
   max = {
     vm_protect = false, anti_debug = true,
@@ -6510,7 +6591,6 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
     junk_comments = true, call_indirection = true, vm_function = true,
-    vm_function_auto_tag = true,
   },
 }
 
@@ -6553,10 +6633,8 @@ local function sync_config_to_passes()
     whitelist = list_to_set(Config.name_whitelist),
   })
   string_pool.set_whitelist(Config.string_whitelist)
-  pm:set_pass_config("vm_function", { vm_function_auto_tag = Config.vm_function_auto_tag and true or false })
    -- vm_function and vm_protect are mutually exclusive
    if Config.vm_function then Config.vm_protect = false end
-  if Config.vm_function_auto_tag then Config.vm_function = true end
 end
 
 -- ============================================================
@@ -6618,7 +6696,6 @@ local feature_names = {
   { key = "basic_block_splitting",   name = "基本块拆分" },
  { key = "vm_protect",               name = "VM字节码虚拟化" },
   { key = "vm_function",               name = "函数级VM保护" },
-  { key = "vm_function_auto_tag",    name = "函数级VM自动标记" },
   { key = "anti_debug",               name = "反调试检测" },
   { key = "call_indirection",         name = "调用间接化" },
 }

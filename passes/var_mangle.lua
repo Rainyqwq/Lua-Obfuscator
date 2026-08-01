@@ -88,6 +88,7 @@ local function scan_identifiers(code)
     -- 标识符
     elseif is_id_start(b) then
       -- 跳过科学计数法中的 e/E(如 1.5e-3)
+      local is_scientific_e = false
       if (b == 101 or b == 69) and pos > 1 then  -- 'e' or 'E'
         local prev = code:byte(pos - 1)
         if is_digit(prev) or prev == BYTE_DOT then
@@ -102,18 +103,19 @@ local function scan_identifiers(code)
           while pos <= len and is_digit(code:byte(pos)) do
             pos = pos + 1
           end
-          goto continue_scan
+          is_scientific_e = true
         end
       end
-      local start = pos
-      pos = pos + 1
-      while pos <= len and is_id_char(code:byte(pos)) do
+      if not is_scientific_e then
+        local start = pos
         pos = pos + 1
+        while pos <= len and is_id_char(code:byte(pos)) do
+          pos = pos + 1
+        end
+        local name = code:sub(start, pos - 1)
+        n = n + 1
+        ids[n] = { name = name, start = start, stop = pos - 1 }
       end
-      local name = code:sub(start, pos - 1)
-      n = n + 1
-      ids[n] = { name = name, start = start, stop = pos - 1 }
-      ::continue_scan::
 
     else
       pos = pos + 1
@@ -214,8 +216,8 @@ local function collect_table_keys(code)
       local depth = 1
       while i <= len and depth > 0 do
         local cb = code:byte(i)
-        if cb == 91 then depth = depth + 1
-        elseif cb == 93 then depth = depth - 1
+        if cb == 91 then depth = depth + 1; i = i + 1
+        elseif cb == 93 then depth = depth - 1; i = i + 1
         elseif cb == 34 or cb == 39 then
           local q2 = cb; i = i + 1
           while i <= len do
@@ -309,6 +311,66 @@ function M.apply(code, ctx)
   local cfg = ctx.config or {}
   local whitelist = normalize_whitelist(cfg.whitelist)
 
+  -- 跳过 VM 保护的代码块（vm_function 生成的代码不应该被混淆）
+  -- 这些代码以 "-- @vm (protected)" 标记
+  local vm_blocks = {}
+  local vm_placeholders = {}
+  local block_idx = 1
+
+  -- 提取所有 VM 保护代码块
+  local function extract_vm_blocks(src)
+    local result = {}
+    local pos = 1
+    local len = #src
+
+    while pos <= len do
+      -- 查找 "-- @vm (protected)" 标记
+      -- NOTE: plain=true 时必须使用字面量，不能带 Lua pattern 转义。
+      local marker_start = src:find("-- @vm (protected)", pos, true)
+      if not marker_start then
+        -- 没有更多 VM 块，添加剩余内容
+        result[#result + 1] = src:sub(pos)
+        break
+      end
+
+      -- 添加标记之前的内容
+      if marker_start > pos then
+        result[#result + 1] = src:sub(pos, marker_start - 1)
+      end
+
+      -- 找到这个 VM 块的结束（下一个 "-- @" 标记或文件结束）
+      local block_end = src:find("\n-- @", marker_start + 1)
+      if not block_end then
+        block_end = len + 1
+      end
+
+      -- 提取 VM 代码块
+      local vm_code = src:sub(marker_start, block_end - 1)
+      local placeholder = "__VM_BLOCK_" .. block_idx .. "__"
+      vm_blocks[placeholder] = vm_code
+      vm_placeholders[#vm_placeholders + 1] = { pos = #table.concat(result) + 1, code = vm_code }
+
+      -- 用占位符替换
+      result[#result + 1] = "\n" .. placeholder .. "\n"
+      block_idx = block_idx + 1
+
+      pos = block_end
+    end
+
+    return table.concat(result)
+  end
+
+  -- 还原 VM 代码块
+  local function restore_vm_blocks(code)
+    for placeholder, vm_code in pairs(vm_blocks) do
+      code = code:gsub(placeholder, vm_code)
+    end
+    return code
+  end
+
+  -- 提取 VM 块，用占位符替换
+  code = extract_vm_blocks(code)
+
   -- 收集需要替换的变量名
   local table_keys = collect_table_keys(code)
   local var_map, ids = collect_local_vars(code, table_keys)
@@ -350,6 +412,9 @@ function M.apply(code, ctx)
   if sn > 0 then
     code = table.concat(segments)
   end
+
+  -- 还原 VM 代码块
+  code = restore_vm_blocks(code)
 
   return code
 end

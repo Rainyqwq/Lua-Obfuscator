@@ -1813,7 +1813,6 @@ local function generate_vm_source(proto, key)
 
   -- Template uses %% for literal % in string.format
   local tpl = [====[
--- @vm (protected)
 -- VM Protected Code (op-pool + char-pool)
 do
   local _d = {%s}
@@ -1927,22 +1926,8 @@ do
     end
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
-      local k = regs[base + C]
       if type(t) == "table" then
-        regs[base + A] = t[k]
-      elseif type(t) == "string" and type(k) == "string" then
-        regs[base + A] = string[k]
-      elseif getmetatable(t) then
-        local mt = getmetatable(t)
-        if mt.__index then
-          if type(mt.__index) == "function" then
-            regs[base + A] = mt.__index(t, k)
-          else
-            regs[base + A] = mt.__index[k]
-          end
-        else
-          regs[base + A] = nil
-        end
+        regs[base + A] = t[regs[base + C]]
       else
         regs[base + A] = nil
       end
@@ -2272,7 +2257,12 @@ M._OPC = OPC
 ------------------------------------------------------------
 -- 函数级VM：生成可调用的VM chunk（返回 function）
 ------------------------------------------------------------
-local function generate_function_vm(proto, key)
+-- opts: nil → 生成 (function() do ... end end)() 形式
+local function 
+
+
+
+generate_function_vm(proto, key)
   local op_map, name_to_rt = build_op_map()
   local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
   local encoded = encode_proto(proto, key, op_map, byte_to_idx)
@@ -2399,25 +2389,7 @@ local function generate_function_vm(proto, key)
     end
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
-      local k = regs[base + C]
-      if type(t) == "table" then
-        regs[base + A] = t[k]
-      elseif type(t) == "string" and type(k) == "string" then
-        regs[base + A] = string[k]
-      elseif getmetatable(t) then
-        local mt = getmetatable(t)
-        if mt.__index then
-          if type(mt.__index) == "function" then
-            regs[base + A] = mt.__index(t, k)
-          else
-            regs[base + A] = mt.__index[k]
-          end
-        else
-          regs[base + A] = nil
-        end
-      else
-        regs[base + A] = nil
-      end
+      regs[base + A] = (type(t) == "table") and t[regs[base + C]] or nil
     end
     H[OP_SETTABLE] = function()
       local t = regs[base + A]
@@ -2607,14 +2579,7 @@ local function generate_function_vm(proto, key)
       end
     end
 
-    -- Safety: hard step limit prevents browser hang if bytecode is corrupted
-    local _steps = 0
-    local _max_steps = 5000000
     while pc <= #code do
-      _steps = _steps + 1
-      if _steps > _max_steps then
-        error("VM step limit exceeded (possible infinite loop)")
-      end
       local ins = code[pc]
       local op = ins.op
       A, B, C = ins.a, ins.b, ins.c

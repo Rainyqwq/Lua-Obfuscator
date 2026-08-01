@@ -1,6 +1,6 @@
 ﻿{
   "name": "lua-obfuscator",
-  "version": "2.10.0",
+  "version": "3.0.0",
   "description": "Lua code obfuscator with VM bytecode virtualization",
   "author": "Rainy_qwq",
   "license": "MIT",
