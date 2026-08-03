@@ -3297,7 +3297,7 @@ function M.split_lines(s)
   local pos = 1
   local len = #s
   while pos <= len do
-    local nl = s:find("\\n", pos, true)
+    local nl = s:find("\n", pos, true)
     n = n + 1
     if nl then
       lines[n] = s:sub(pos, nl - 1)
@@ -7130,7 +7130,7 @@ local function scan_identifiers(code)
 
     -- 跳过注释
     elseif b == 45 and pos < len and code:byte(pos + 1) == 45 then
-      local nl = code:find("\\n", pos + 2, true)
+      local nl = code:find("\n", pos + 2, true)
       pos = nl and (nl + 1) or (len + 1)
 
     -- 跳过字符串(已替换为占位符,不会到这里)
@@ -7250,7 +7250,7 @@ local function collect_table_keys(code)
       i = ep and (ep+2) or (i+1)
     -- Skip comments
     elseif b == 45 and i < len and code:byte(i+1) == 45 then
-      local nl = code:find("\\n", i+2, true)
+      local nl = code:find("\n", i+2, true)
       i = nl and (nl+1) or (len+1)
     -- Skip string literals
     elseif b == 34 or b == 39 then
