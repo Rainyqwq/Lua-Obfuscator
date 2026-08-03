@@ -311,8 +311,8 @@ function M.apply(code, ctx)
   local cfg = ctx.config or {}
   local whitelist = normalize_whitelist(cfg.whitelist)
 
-  -- 跳过 VM 保护的代码块（vm_function 生成的代码不应该被混淆）
-  -- 这些代码以 "-- @vm (protected)" 标记
+  -- 跳过 VM 保护的代码块（vm_protect 生成的代码不应该被混淆）
+  -- 这些代码以 "-- VM Protected Code" 开头
   local vm_blocks = {}
   local vm_placeholders = {}
   local block_idx = 1
@@ -324,33 +324,30 @@ function M.apply(code, ctx)
     local len = #src
 
     while pos <= len do
-      -- 查找 "-- @vm (protected)" 标记
-      -- NOTE: plain=true 时必须使用字面量，不能带 Lua pattern 转义。
-      local marker_start = src:find("-- @vm (protected)", pos, true)
+      -- 查找 "-- VM Protected Code" 标记
+      local marker_start = src:find("-- VM Protected Code", pos, true)
       if not marker_start then
-        -- 没有更多 VM 块，添加剩余内容
         result[#result + 1] = src:sub(pos)
         break
       end
 
-      -- 添加标记之前的内容
       if marker_start > pos then
         result[#result + 1] = src:sub(pos, marker_start - 1)
       end
 
-      -- 找到这个 VM 块的结束（下一个 "-- @" 标记或文件结束）
-      local block_end = src:find("\n-- @", marker_start + 1)
-      if not block_end then
+      -- VM 块从标记行开始，到下一个 VM 标记或文件结束
+      local next_marker = src:find("\n-- VM Protected Code", marker_start + 1)
+      if not next_marker then
         block_end = len + 1
+      else
+        block_end = next_marker
       end
 
-      -- 提取 VM 代码块
       local vm_code = src:sub(marker_start, block_end - 1)
       local placeholder = "__VM_BLOCK_" .. block_idx .. "__"
       vm_blocks[placeholder] = vm_code
       vm_placeholders[#vm_placeholders + 1] = { pos = #table.concat(result) + 1, code = vm_code }
 
-      -- 用占位符替换
       result[#result + 1] = "\n" .. placeholder .. "\n"
       block_idx = block_idx + 1
 

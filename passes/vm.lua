@@ -23,7 +23,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "2.10.0"
+local VERSION = "3.0.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -407,13 +407,27 @@ function Parser:parse_stmt()
         break
       end
     end
-    local full_name = table.concat(name_parts)
     self:expect("OP", "(")
     local params = self:parse_param_list()
     self:expect("OP", ")")
     local body = self:parse_block()
     self:expect("KEYWORD", "end")
-    return ast_assign({ast_ident(full_name)}, {ast_func_def(params, body, false)})
+
+    -- Build assignment target:
+    --   function foo()      -> foo = <func_def>
+    --   function M.foo()    -> M.foo = <func_def>  (table field assignment)
+    local func_def = ast_func_def(params, body, false)
+    if #name_parts == 1 then
+      -- Simple name: function foo()
+      return ast_assign({ast_ident(name)}, {func_def})
+    else
+      -- Dotted name: rebuild index expression M.foo -> M["foo"]
+      local target = ast_ident(name_parts[1])
+      for i = 2, #name_parts, 2 do
+        target = ast_index(target, ast_string(name_parts[i + 1]))
+      end
+      return ast_assign({target}, {func_def})
+    end
   end
   
   -- If statement
@@ -1491,6 +1505,22 @@ function Compiler:compile_expr(expr)
       return concat_regs[1]
     end
     local lr = self:compile_expr(expr.left)
+
+    -- Logical and/or with true Lua short-circuit semantics:
+    --   a and b -> if a falsy: a, else b (b is not evaluated when a falsy)
+    --   a or  b -> if a truthy: a, else b (b is not evaluated when a truthy)
+    -- TEST C=0 skips next when truthy; C=1 skips next when falsy.
+    if expr.op == "and" or expr.op == "or" then
+      local c_bit = (expr.op == "and") and 0 or 1
+      self:emit(OPC.TEST, lr, 0, c_bit)
+      local jmp_pc = self:emit(OPC.JMP, 0, 0, 0)   -- placeholder, resolved after rhs
+      local rb = self:compile_expr(expr.right)
+      self:emit(OPC.MOVE, lr, rb, 0)
+      self:free_reg(rb)
+      self.code[jmp_pc].b = #self.code - jmp_pc
+      return lr
+    end
+
     local rr = self:compile_expr(expr.right)
     if opcodes[expr.op] then
       self:emit(opcodes[expr.op], lr, lr, rr)
@@ -1517,12 +1547,7 @@ function Compiler:compile_expr(expr)
       self:free_reg(rr)
       return r
     end
-    -- Logical
-    if expr.op == "and" or expr.op == "or" then
-      -- Simplified: evaluate both sides
-      self:free_reg(lr)
-      return rr
-    end
+    -- Logical (and/or already handled above with short-circuit)
     self:free_reg(lr)
     self:free_reg(rr)
     return lr
@@ -1813,9 +1838,7 @@ local function generate_vm_source(proto, key)
 
   -- Template uses %% for literal % in string.format
   local tpl = [====[
--- @vm (protected)
 -- VM Protected Code (op-pool + char-pool)
-do
   local _d = {%s}
   local _chars = {%s}
   local _k = %d
@@ -2218,7 +2241,6 @@ do
   local regs = {}
   exec_proto(main_proto, regs, 0, 0, nil)
   _G._pack = _orig_pack
-end
 ]====]
 
   return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)

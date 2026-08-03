@@ -1,6 +1,5 @@
 -- Auto-generated bundle: all pass modules inlined
 do
-
   package.preload["pass_manager"] = function()
     return load([[-- ================================================================
 -- pass_manager.lua
@@ -323,7 +322,6 @@ end
 return PassManager
 ]], "@pass_manager.lua")()
   end
-
   package.preload["passes"] = function()
     return load([[-- ================================================================
 -- passes/init.lua
@@ -382,66 +380,6 @@ end
 return M
 ]], "@passes/init.lua")()
   end
-
-  package.preload["passes/init"] = function()
-    return load([[-- ================================================================
--- passes/init.lua
--- Pass 加载器
---
--- Author: Rainy_qwq
--- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
--- License: MIT
--- ================================================================
--- 扫描 passes/ 目录，加载所有 Pass 模块并注册到 PassManager
---
--- 用法：
---   local PassManager = require("pass_manager")
---   local pm = PassManager.new()
---   require("passes").load_all(pm)
-
-local M = {}
-
--- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
--- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
-local BUILTIN = {
-  "passes.vm_function",
-  "passes.vm_protect",
-  "passes.anti_debug",
-  "passes.string_encrypt",
-  "passes.num_encrypt",
-  "passes.instr_sub",
-  "passes.var_mangle",
-  "passes.adv_fake_cf",
- "passes.cf_flatten",
- "passes.bcf",
-  "passes.bb_split",
- "passes.junk_comment",
-  "passes.call_indirect",
-  "passes.header",
-}
-
--- 加载所有内置 Pass 并注册到 PassManager
-function M.load_all(pm)
-  for _, name in ipairs(BUILTIN) do
-    local ok, pass = pcall(require, name)
-    if ok and type(pass) == "table" and pass.name then
-      pm:register(pass)
-    else
-      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
-    end
-  end
-  return pm
-end
-
--- 注册单个自定义 Pass
-function M.register(pm, pass)
-  pm:register(pass)
-end
-
-return M
-]], "@passes/init.lua")()
-  end
-
   package.preload["passes.utils"] = function()
     return load([=[-- ================================================================
 -- passes/utils.lua
@@ -569,7 +507,6 @@ end
 return M
 ]=], "@passes/utils.lua")()
   end
-
   package.preload["passes.string_pool"] = function()
     return load([==[-- ================================================================
 -- passes/string_pool.lua
@@ -1128,7 +1065,6 @@ end
 return M
 ]==], "@passes/string_pool.lua")()
   end
-
   package.preload["passes.vm"] = function()
     return load([=[-- ================================================================
 -- vm.lua
@@ -1154,7 +1090,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "2.10.0"
+local VERSION = "3.0.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -1544,7 +1480,20 @@ function Parser:parse_stmt()
     self:expect("OP", ")")
     local body = self:parse_block()
     self:expect("KEYWORD", "end")
-    return ast_assign({ast_ident(full_name)}, {ast_func_def(params, body, false)})
+
+    -- Build assignment target:
+    --   function foo()      -> foo = <func_def>
+    --   function M.foo()    -> M.foo = <func_def>  (table field assignment)
+    local func_def = ast_func_def(params, body, false)
+    if #name_parts == 1 then
+      return ast_assign({ast_ident(full_name)}, {func_def})
+    else
+      local target = ast_ident(name_parts[1])
+      for i = 2, #name_parts, 2 do
+        target = ast_index(target, ast_string(name_parts[i + 1]))
+      end
+      return ast_assign({target}, {func_def})
+    end
   end
   
   -- If statement
@@ -2622,6 +2571,22 @@ function Compiler:compile_expr(expr)
       return concat_regs[1]
     end
     local lr = self:compile_expr(expr.left)
+
+    -- Logical and/or with true Lua short-circuit semantics:
+    --   a and b -> if a falsy: a, else b (b is not evaluated when a falsy)
+    --   a or  b -> if a truthy: a, else b (b is not evaluated when a truthy)
+    -- TEST C=0 skips next when truthy; C=1 skips next when falsy.
+    if expr.op == "and" or expr.op == "or" then
+      local c_bit = (expr.op == "and") and 0 or 1
+      self:emit(OPC.TEST, lr, 0, c_bit)
+      local jmp_pc = self:emit(OPC.JMP, 0, 0, 0)   -- placeholder, resolved after rhs
+      local rb = self:compile_expr(expr.right)
+      self:emit(OPC.MOVE, lr, rb, 0)
+      self:free_reg(rb)
+      self.code[jmp_pc].b = #self.code - jmp_pc
+      return lr
+    end
+
     local rr = self:compile_expr(expr.right)
     if opcodes[expr.op] then
       self:emit(opcodes[expr.op], lr, lr, rr)
@@ -2648,12 +2613,7 @@ function Compiler:compile_expr(expr)
       self:free_reg(rr)
       return r
     end
-    -- Logical
-    if expr.op == "and" or expr.op == "or" then
-      -- Simplified: evaluate both sides
-      self:free_reg(lr)
-      return rr
-    end
+    -- Logical (and/or already handled above with short-circuit)
     self:free_reg(lr)
     self:free_reg(rr)
     return lr
@@ -2944,9 +2904,7 @@ local function generate_vm_source(proto, key)
 
   -- Template uses %% for literal % in string.format
   local tpl = [====[
--- @vm (protected)
 -- VM Protected Code (op-pool + char-pool)
-do
   local _d = {%s}
   local _chars = {%s}
   local _k = %d
@@ -3349,7 +3307,6 @@ do
   local regs = {}
   exec_proto(main_proto, regs, 0, 0, nil)
   _G._pack = _orig_pack
-end
 ]====]
 
   return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)
@@ -4002,7 +3959,6 @@ end
 return M
 ]=], "@passes/vm.lua")()
   end
-
   package.preload["passes.vm_protect"] = function()
     return load([[-- ================================================================
 -- passes/vm_protect.lua
@@ -4028,7 +3984,7 @@ M.title       = "VM字节码虚拟化"
 M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行"
 M.version     = "2.9.0"
 M.author      = "Rainy_qwq"
-M.order       = 10
+M.order       = 35  -- 必须在 var_mangle(30) 之后，否则 var_mangle 会混淆 VM 块中的变量
 M.enabled     = false  -- 默认关闭，需手动开启
 
 function M.apply(code, ctx)
@@ -4043,10 +3999,9 @@ end
 return M
 ]], "@passes/vm_protect.lua")()
   end
-
   package.preload["passes.vm_function"] = function()
     return load([[local M={}
-M.name="vm_function";M.title="函数级VM保护";M.description="对指定顶层函数进行VM字节码虚拟化保护";M.version="2.10.0";M.author="Rainy_qwq";M.order=5;M.enabled=false
+M.name="vm_function";M.title="函数级VM保护";M.description="对指定顶层函数进行VM字节码虚拟化保护";M.version="3.0.0";M.author="Rainy_qwq";M.order=5;M.enabled=false
 
 local function find_function_end(code_lines,func_line)
   local state=0;local pd=0;local depth=1
@@ -4163,7 +4118,6 @@ return M
 
 ]], "@passes/vm_function.lua")()
   end
-
   package.preload["passes.string_encrypt"] = function()
     return load([[-- ================================================================
 -- passes/string_encrypt.lua
@@ -4199,7 +4153,6 @@ end
 return M
 ]], "@passes/string_encrypt.lua")()
   end
-
   package.preload["passes.var_mangle"] = function()
     return load([[-- ================================================================
 -- passes/var_mangle.lua
@@ -4514,8 +4467,8 @@ function M.apply(code, ctx)
   local cfg = ctx.config or {}
   local whitelist = normalize_whitelist(cfg.whitelist)
 
-  -- 跳过 VM 保护的代码块（vm_function 生成的代码不应该被混淆）
-  -- 这些代码以 "-- @vm (protected)" 标记
+  -- 跳过 VM 保护的代码块（vm_protect 生成的代码不应该被混淆）
+  -- 这些代码以 "-- VM Protected Code" 开头
   local vm_blocks = {}
   local vm_placeholders = {}
   local block_idx = 1
@@ -4527,33 +4480,30 @@ function M.apply(code, ctx)
     local len = #src
 
     while pos <= len do
-      -- 查找 "-- @vm (protected)" 标记
-      -- NOTE: plain=true 时必须使用字面量，不能带 Lua pattern 转义。
-      local marker_start = src:find("-- @vm (protected)", pos, true)
+      -- 查找 "-- VM Protected Code" 标记
+      local marker_start = src:find("-- VM Protected Code", pos, true)
       if not marker_start then
-        -- 没有更多 VM 块，添加剩余内容
         result[#result + 1] = src:sub(pos)
         break
       end
 
-      -- 添加标记之前的内容
       if marker_start > pos then
         result[#result + 1] = src:sub(pos, marker_start - 1)
       end
 
-      -- 找到这个 VM 块的结束（下一个 "-- @" 标记或文件结束）
-      local block_end = src:find("\n-- @", marker_start + 1)
-      if not block_end then
+      -- VM 块从标记行开始，到下一个 VM 标记或文件结束
+      local next_marker = src:find("\n-- VM Protected Code", marker_start + 1)
+      if not next_marker then
         block_end = len + 1
+      else
+        block_end = next_marker
       end
 
-      -- 提取 VM 代码块
       local vm_code = src:sub(marker_start, block_end - 1)
       local placeholder = "__VM_BLOCK_" .. block_idx .. "__"
       vm_blocks[placeholder] = vm_code
       vm_placeholders[#vm_placeholders + 1] = { pos = #table.concat(result) + 1, code = vm_code }
 
-      -- 用占位符替换
       result[#result + 1] = "\n" .. placeholder .. "\n"
       block_idx = block_idx + 1
 
@@ -4625,7 +4575,6 @@ end
 return M
 ]], "@passes/var_mangle.lua")()
   end
-
   package.preload["passes.num_encrypt"] = function()
     return load([[-- ================================================================
 -- passes/num_encrypt.lua
@@ -4955,7 +4904,6 @@ end
 
 return M]], "@passes/num_encrypt.lua")()
   end
-
   package.preload["passes.instr_sub"] = function()
     return load([[-- ================================================================
 -- passes/instr_sub.lua
@@ -5379,7 +5327,6 @@ end
 return M
 ]], "@passes/instr_sub.lua")()
   end
-
   package.preload["passes.adv_fake_cf"] = function()
     return load([[-- ================================================================
 -- passes/adv_fake_cf.lua
@@ -5485,7 +5432,6 @@ end
 return M
 ]], "@passes/adv_fake_cf.lua")()
   end
-
   package.preload["passes.cf_flatten"] = function()
     return load([[-- ================================================================
 -- passes/cf_flatten.lua
@@ -5669,7 +5615,6 @@ end
 return M
 ]], "@passes/cf_flatten.lua")()
   end
-
   package.preload["passes.bcf"] = function()
     return load([[-- ================================================================
 -- passes/bcf.lua
@@ -5831,7 +5776,6 @@ end
 
 return M]], "@passes/bcf.lua")()
   end
-
   package.preload["passes.bb_split"] = function()
     return load([[-- ================================================================
 -- passes/bb_split.lua
@@ -6151,7 +6095,6 @@ end
 return M
 ]], "@passes/bb_split.lua")()
   end
-
   package.preload["passes.junk_comment"] = function()
     return load([[-- ================================================================
 -- passes/junk_comment.lua
@@ -6239,7 +6182,6 @@ end
 return M
 ]], "@passes/junk_comment.lua")()
   end
-
   package.preload["passes.header"] = function()
     return load([[-- ================================================================
 -- passes/header.lua
@@ -6261,7 +6203,7 @@ M.order   = 200
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v2.10.0
+-- Obfuscated by Lua Obfuscator v3.0.0
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --
@@ -6279,7 +6221,6 @@ end
 return M
 ]], "@passes/header.lua")()
   end
-
   package.preload["passes.anti_debug"] = function()
     return load([[-- passes/anti_debug.lua
 -- Anti-debugging detection pass
@@ -6340,7 +6281,6 @@ end
 return M
 ]], "@passes/anti_debug.lua")()
   end
-
   package.preload["passes.call_indirect"] = function()
     return load([[-- ================================================================
 -- passes/call_indirect.lua
@@ -6452,7 +6392,64 @@ end
 return M
 ]], "@passes/call_indirect.lua")()
   end
+  package.preload["passes.init"] = function()
+    return load([[-- ================================================================
+-- passes/init.lua
+-- Pass 加载器
+--
+-- Author: Rainy_qwq
+-- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
+-- License: MIT
+-- ================================================================
+-- 扫描 passes/ 目录，加载所有 Pass 模块并注册到 PassManager
+--
+-- 用法：
+--   local PassManager = require("pass_manager")
+--   local pm = PassManager.new()
+--   require("passes").load_all(pm)
 
+local M = {}
+
+-- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
+-- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
+local BUILTIN = {
+  "passes.vm_function",
+  "passes.vm_protect",
+  "passes.anti_debug",
+  "passes.string_encrypt",
+  "passes.num_encrypt",
+  "passes.instr_sub",
+  "passes.var_mangle",
+  "passes.adv_fake_cf",
+ "passes.cf_flatten",
+ "passes.bcf",
+  "passes.bb_split",
+ "passes.junk_comment",
+  "passes.call_indirect",
+  "passes.header",
+}
+
+-- 加载所有内置 Pass 并注册到 PassManager
+function M.load_all(pm)
+  for _, name in ipairs(BUILTIN) do
+    local ok, pass = pcall(require, name)
+    if ok and type(pass) == "table" and pass.name then
+      pm:register(pass)
+    else
+      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
+    end
+  end
+  return pm
+end
+
+-- 注册单个自定义 Pass
+function M.register(pm, pass)
+  pm:register(pass)
+end
+
+return M
+]], "@passes/init.lua")()
+  end
 end
 
 -- ================================================================
@@ -6505,7 +6502,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "2.10.0"
+local VERSION = "3.0.0"
 
 -- ============================================================
 -- 加载 Pass 系统
