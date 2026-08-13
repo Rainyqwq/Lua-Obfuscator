@@ -23,7 +23,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "3.0.0"
+local VERSION = "3.1.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -1837,8 +1837,8 @@ local function generate_vm_source(proto, key)
   local op_locals_str = table.concat(op_locals, "\n")
 
   -- Template uses %% for literal % in string.format
+  -- 注意：生成代码不含标记和 do...end 包裹，由调用方（vm_protect / vm_function Pass）统一处理
   local tpl = [====[
--- VM Protected Code (op-pool + char-pool)
   local _d = {%s}
   local _chars = {%s}
   local _k = %d
@@ -2863,9 +2863,24 @@ local function protect_as_expr(source_code, opts)
   end
 
   local out_lines = {}
+  -- 先声明所有 VM 变量（在 do...end 外部，确保函数桩能访问）
+  local vm_names = {}
   for _, decl in ipairs(vm_decls) do
-    out_lines[#out_lines + 1] = decl
+    local name = decl:match("^local%s+([%w_]+)%s*=")
+    if name then
+      vm_names[#vm_names + 1] = name
+      out_lines[#out_lines + 1] = "local " .. name
+    end
   end
+  -- VM 声明块外包 do...end + 标记（内部仅赋值，不重复 local）
+  out_lines[#out_lines + 1] = "-- @vm (protected)"
+  out_lines[#out_lines + 1] = "-- VM Protected Code (op-pool + char-pool)"
+  out_lines[#out_lines + 1] = "do"
+  for _, decl in ipairs(vm_decls) do
+    local assign = decl:gsub("^local%s+", "")
+    out_lines[#out_lines + 1] = assign
+  end
+  out_lines[#out_lines + 1] = "end"
 
   -- 顶层函数替换为哑实现
   for _, func_stmt in ipairs(func_stmts) do

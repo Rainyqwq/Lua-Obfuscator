@@ -175,6 +175,27 @@ local function test_pass(pass_name, enabled)
   for _, p in ipairs(ALL_PASSES) do cfg[p] = false end
   cfg[pass_name] = enabled
   M.set_config(cfg)
+
+  if pass_name == "vm_protect" then
+    for _, tc in ipairs(TEST_CASES) do
+      local ok, result = pcall(M.obfuscate_code, tc.code)
+      if not ok then
+        return false, "混淆失败", tc.name .. " => " .. tostring(result)
+      end
+
+      local fn, err = load(result)
+      if not fn then
+        return false, "语法错误", tc.name .. " => " .. tostring(err)
+      end
+
+      local ok2, run_err = pcall(fn)
+      if not ok2 then
+        return false, "运行错误", tc.name .. " => " .. tostring(run_err)
+      end
+    end
+    return true, "通过", 0
+  end
+
   local ok, result = pcall(M.obfuscate_code, all_code)
   if not ok then return false, "混淆失败", result end
   local fn, err = load(result)
@@ -221,6 +242,9 @@ for _, pass_name in ipairs(ALL_PASSES) do
   else
     failed_tests[#failed_tests + 1] = { name = pass_name, status = status, info = info }
     print(string.format("  ❌ %-25s %s", pass_name, status))
+    if pass_name == "vm_protect" then
+      print("      DETAIL: " .. tostring(info))
+    end
   end
 end
 

@@ -20,7 +20,7 @@ local M = {}
 M.name        = "vm_protect"
 M.title       = "VM字节码虚拟化"
 M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行"
-M.version     = "2.9.0"
+M.version     = "2.9.1"
 M.author      = "Rainy_qwq"
 M.order       = 10
 M.enabled     = false  -- 默认关闭，需手动开启
@@ -31,7 +31,8 @@ function M.apply(code, ctx)
   if not result then
     error("VM保护失败: " .. tostring(err))
   end
-  return result
+  -- 外包 do...end 并添加 VM 标记，供 var_mangle 识别
+  return "-- @vm (protected)\n-- VM Protected Code (op-pool + char-pool)\ndo\n" .. result .. "\nend"
 end
 
 return M

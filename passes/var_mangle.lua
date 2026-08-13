@@ -23,7 +23,7 @@ local M = {}
 
 M.name    = "variable_mangling"
 M.title   = "变量名混淆"
-M.version = "1.1.0"
+M.version = "1.2.0"
 M.order   = 30
 M.config  = {
   whitelist = {}, -- names that must not be renamed
@@ -311,11 +311,30 @@ function M.apply(code, ctx)
   local cfg = ctx.config or {}
   local whitelist = normalize_whitelist(cfg.whitelist)
 
-  -- 跳过 VM 保护的代码块（vm_protect 生成的代码不应该被混淆）
-  -- 这些代码以 "-- VM Protected Code" 开头
+  -- 跳过 VM 保护的代码块（vm_protect / vm_function 生成的代码不应该被混淆）
+  -- 标记行：-- @vm (protected)（下一行为 -- VM Protected Code (op-pool + char-pool)，再下一行为 do）
+  -- 块结束：与起始 do 配对的独立行 end（该 end 在行首，后面只有可选分号/空白）
   local vm_blocks = {}
   local vm_placeholders = {}
   local block_idx = 1
+
+  local LINE_BREAK = string.byte("\n")
+  local SPACE = string.byte(" ")
+  local TAB = string.byte("\t")
+  local SEMI = string.byte(";")
+  local RET = string.byte("\r")
+
+  -- 从字节位置查找下一个换行（返回行结束位置 pos；行内容为 src[line_start .. pos-1]）
+  local function scan_eol(src, pos, len)
+    local i = pos
+    while i <= len do
+      local c = src:byte(i)
+      if c == LINE_BREAK then return i, i + 1 end
+      if c == 13 then return i, i + 1 end  -- \r\n 或 \r
+      i = i + 1
+    end
+    return len + 1, len + 1
+  end
 
   -- 提取所有 VM 保护代码块
   local function extract_vm_blocks(src)
@@ -323,27 +342,91 @@ function M.apply(code, ctx)
     local pos = 1
     local len = #src
 
+    -- 辅助函数：按单词边界计数关键字
+    local function count_word(s, w)
+      local n = 0
+      local p = 1
+      while p <= #s do
+        local i, j = s:find(w, p, true)
+        if not i then break end
+        local before_ok = (i == 1) or not s:sub(i-1, i-1):match("[%w_]")
+        local after_ok = (j == #s) or not s:sub(j+1, j+1):match("[%w_]")
+        if before_ok and after_ok then n = n + 1 end
+        p = j + 1
+      end
+      return n
+    end
+
     while pos <= len do
-      -- 查找 "-- VM Protected Code" 标记
-      local marker_start = src:find("-- VM Protected Code", pos, true)
+      -- 查找标记行 "-- @vm (protected)"（行首起匹配）
+      local marker_start = src:find("-- @vm (protected)", pos, true)
       if not marker_start then
         result[#result + 1] = src:sub(pos)
         break
       end
 
+      -- 块应从标记行的行首开始（含整行）
+      local bol = marker_start
+      while bol > 1 and (src:byte(bol - 1) == SPACE or src:byte(bol - 1) == TAB
+             or src:byte(bol - 1) == RET) do
+        bol = bol - 1
+      end
       if marker_start > pos then
-        result[#result + 1] = src:sub(pos, marker_start - 1)
+        result[#result + 1] = src:sub(pos, bol - 1)
       end
 
-      -- VM 块从标记行开始，到下一个 VM 标记或文件结束
-      local next_marker = src:find("\n-- VM Protected Code", marker_start + 1)
-      if not next_marker then
-        block_end = len + 1
-      else
-        block_end = next_marker
+      -- 定位到标记行行尾，从标记行的下一行开始扫描块结束
+      local _, after_marker_eol = scan_eol(src, bol, len)
+      local depth = 0
+      local block_end = nil
+      local i = after_marker_eol
+
+      while i <= len do
+        local eol, next_line = scan_eol(src, i, len)
+        local line = src:sub(i, eol - 1)
+        -- 去掉行首空白，便于比对内容
+        local line_start = 1
+        while line_start <= #line do
+          local c = line:byte(line_start)
+          if c == SPACE or c == TAB or c == RET then line_start = line_start + 1 else break end
+        end
+        local t = line:sub(line_start)
+
+        -- 跟踪所有 Lua 块结构：计入所有创建块的 keyword
+        local openers = 0
+        local closers = 0
+
+        openers = openers + count_word(t, "function")
+        openers = openers + count_word(t, "for")
+        openers = openers + count_word(t, "while")
+        openers = openers + count_word(t, "if")
+        openers = openers + count_word(t, "elseif")
+        openers = openers + count_word(t, "repeat")
+        -- 注意：不要 count_word(t, "do") 或 count_word(t, "then")
+        -- 因为 for/while 和 if/elseif 已经各计一次，do/then 是同一块的组成部分
+        -- 仅当行首只有 do 关键字时算独立块
+        if t == "do" or t == "do;" then
+          openers = openers + 1
+        end
+
+        closers = closers + count_word(t, "end")
+        closers = closers + count_word(t, "until")
+
+        depth = depth + openers - closers
+        if closers > 0 and depth == 0 then
+          block_end = eol
+          break
+        end
+        i = next_line
       end
 
-      local vm_code = src:sub(marker_start, block_end - 1)
+      if not block_end then
+        -- 找不到配对 end（不完整块），原样保留剩余内容并退出
+        result[#result + 1] = src:sub(bol)
+        break
+      end
+
+      local vm_code = src:sub(bol, block_end - 1)
       local placeholder = "__VM_BLOCK_" .. block_idx .. "__"
       vm_blocks[placeholder] = vm_code
       vm_placeholders[#vm_placeholders + 1] = { pos = #table.concat(result) + 1, code = vm_code }
