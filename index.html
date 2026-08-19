@@ -14,113 +14,993 @@
   License: MIT
 -->
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--fg:#c9d1d9;--fg2:#8b949e;--accent:#58a6ff;--accent2:#3fb950;--err:#f85149;--warn:#d29922;--border:#30363d;--code-bg:#0d1117}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);height:100vh;display:flex;flex-direction:column;overflow:hidden}
-header{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:16px;flex-shrink:0}
-header h1{font-size:16px;font-weight:600;color:var(--accent)}
-header .tag{font-size:11px;background:var(--accent);color:var(--bg);padding:2px 6px;border-radius:3px;font-weight:600}
-.main{display:flex;flex:1;overflow:hidden}
-.panel{display:flex;flex-direction:column;border-right:1px solid var(--border);flex:1;min-width:0;position:relative}
-.panel:last-child{border-right:none}
-.panel-header{background:var(--bg2);padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--fg2);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.panel-header .badge{font-size:10px;padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--fg2)}
-.editor{flex:1;overflow:hidden;position:relative}
-textarea{width:100%;height:100%;background:var(--code-bg);color:var(--fg);border:none;padding:12px;font-family:'JetBrains Mono','Fira Code','Cascadia Code',monospace;font-size:13px;line-height:1.6;resize:none;outline:none;tab-size:2}
-textarea::selection{background:rgba(88,166,255,0.3)}
-.controls{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 12px;flex-shrink:0;overflow-x:auto}
-.controls-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
-.controls-row:last-child{margin-bottom:0}
-.controls-row label{font-size:11px;color:var(--fg2);display:flex;align-items:center;gap:4px;cursor:pointer;padding:4px 8px;border-radius:4px;background:var(--bg3);border:1px solid var(--border);white-space:nowrap;transition:all .15s;user-select:none}
-.controls-row label:hover{border-color:var(--accent)}
-.controls-row label.on{background:rgba(88,166,255,0.15);border-color:var(--accent);color:var(--accent)}
-.controls-row label input{display:none}
-.btn-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
-button{padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg3);color:var(--fg);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
-button:hover{border-color:var(--accent);color:var(--accent)}
-button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-button.primary:hover{opacity:0.85}
-button.danger{border-color:var(--err);color:var(--err)}
-button.danger:hover{background:var(--err);color:#fff}
-.output-area{flex:1;overflow:auto;padding:12px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
-.output-area .info{color:var(--accent)}
-.output-area .success{color:var(--accent2)}
-.output-area .error{color:var(--err)}
-.output-area .warn{color:var(--warn)}
-.output-area .dim{color:var(--fg2)}
-.stats{display:flex;gap:16px;padding:6px 12px;background:var(--bg3);border-top:1px solid var(--border);font-size:11px;color:var(--fg2);flex-shrink:0}
-.stats span{white-space:nowrap}
-.resizer{width:4px;background:var(--border);cursor:col-resize;flex-shrink:0;transition:background .15s}
-.resizer:hover{background:var(--accent)}
+/* ════════════════════════════════════════════════════════════════
+   Apple Liquid Glass — Lua Obfuscator
+   Refactored to Apple Liquid Glass spec
+   Ground #f5f5f7 · Surface #fff · Hairline dividers
+   Glass only where layers overlap · Accent is one blue
+   ════════════════════════════════════════════════════════════════ */
 
-/* === Mobile / Tablet responsive === */
+/* ── Design tokens (exact Apple Liquid Glass values) ── */
+:root {
+  /* Neutrals */
+  --bg:        #f5f5f7;
+  --surface:   #ffffff;
+  --hover:     #fbfbfd;
+  --text:      #1d1d1f;
+  --text-body: #424245;
+  --text-2:    #6e6e73;
+  --text-3:    #86868b;
+  --text-4:    #aeaeb2;
+  --faint:     #d2d2d7;
+  --hairline:  rgba(0,0,0,0.07);
+
+  /* Accents — emphasis only */
+  --accent:      #0071e3;
+  --accent-link: #0066cc;
+  --indigo:      #5e5ce6;
+  --heat:        #ff6b00;
+  --heat-bg:     rgba(255,107,0,0.1);
+  --live:        #30d158;
+  --danger:      #ff375f;
+  --danger-bg:   rgba(255,55,95,.1);
+  --warn:        #ff9f0a;
+  --warn-bg:     rgba(255,159,10,.1);
+
+  /* Component greys */
+  --track: #e8e8ed;
+
+  /* Font stacks */
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+          'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Radius tiers (semantic — never invent in-between) */
+  --r-pill:  999px;
+  --r-chip:  6px;
+  --r-thumb: 12px;
+  --r-card:  18px;
+  --r-panel: 22px;
+  --r-hero:  26px;
+  --r-sheet: 16px;
+
+  /* Shadows (two-layer: tight contact + soft spread) */
+  --sh-card:    0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+  --sh-panel:   0 1px 3px rgba(0,0,0,.05), 0 14px 40px rgba(0,0,0,.05);
+  --sh-lift:    0 12px 32px rgba(0,0,0,.1);
+  --sh-overlay: 0 2px 8px rgba(0,0,0,.10), 0 30px 80px rgba(0,0,0,.24);
+
+  /* Layout */
+  --max-read: 720px;
+  --max-grid: 1080px;
+  --pad-x:    22px;
+
+  /* Motion easing */
+  --ease-spring:    cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+:root.dark {
+  --bg:        #1c1c1e;
+  --surface:   #2c2c2e;
+  --hover:     #333336;
+  --text:      #f5f5f7;
+  --text-body: #d1d1d6;
+  --text-2:    #98989e;
+  --text-3:    #7c7c82;
+  --text-4:    #636366;
+  --faint:     #48484a;
+  --hairline:  rgba(255,255,255,0.12);
+  --track:     #3a3a3c;
+  --sh-card:   0 1px 2px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.3);
+  --sh-panel:  0 1px 3px rgba(0,0,0,.25), 0 14px 40px rgba(0,0,0,.3);
+  --sh-lift:   0 12px 32px rgba(0,0,0,.4);
+  --sh-overlay:0 2px 8px rgba(0,0,0,.3), 0 30px 80px rgba(0,0,0,.5);
+  --accent:    #0a84ff;
+  --accent-link:#409cff;
+  --danger:    #ff5e7a;
+  --danger-bg: rgba(255,94,122,.12);
+  --warn:      #ffb340;
+  --warn-bg:   rgba(255,179,64,.12);
+}
+
+/* ── Reset & base ── */
+*{margin:0;padding:0;box-sizing:border-box}
+::selection{background:rgba(0,113,227,.18)}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--faint);border-radius:999px}
+
+/* ── Body & page ground ── */
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  font-optical-sizing:auto;
+  line-height:1.85;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* ── Startup animation ──
+   On first paint, the chrome (nav + 3 panels) enters with a stagger.
+   Animation runs once via `animation-fill-mode: both`; afterwards the
+   elements stay at their resting state. Reduced-motion users get an
+   instant paint (see prefers-reduced-motion at the bottom). */
+@keyframes nav-in{
+  from{ transform:translateY(-12px); opacity:0; }
+  to  { transform:translateY(0);     opacity:1; }
+}
+@keyframes panel-in{
+  from{ transform:translateY(14px); opacity:0; }
+  to  { transform:translateY(0);    opacity:1; }
+}
+@keyframes cta-in{
+  from{ transform:translateY(14px) scale(.96); opacity:0; }
+  to  { transform:translateY(0)    scale(1);   opacity:1; }
+}
+.enter-nav{
+  animation:nav-in .45s var(--ease-spring) both;
+  animation-delay:.05s;
+}
+.enter-panel{
+  animation:panel-in .55s var(--ease-spring) both;
+  /* delay set per-element via inline style for stagger */
+}
+.enter-cta{
+  animation:cta-in .5s var(--ease-spring) both;
+  /* delay set per-element via inline style */
+}
+
+/* ── Glass nav (Apple liquid glass recipe) ── */
+.glass-nav{
+  position:relative;top:0;z-index:50;height:52px;
+  background:rgba(245,245,247,.72);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--hairline);
+  display:flex;align-items:center;gap:12px;
+  padding:0 var(--pad-x);flex-shrink:0;
+  transition:box-shadow .3s;
+}
+.glass-nav.scrolled{
+  box-shadow:0 1px 12px rgba(0,0,0,.04);
+}
+:root.dark .glass-nav{background:rgba(28,28,30,.78)}
+
+.glass-nav .logo{
+  width:28px;height:28px;border-radius:var(--r-chip);
+  background:var(--accent);display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:13px;color:#fff;flex-shrink:0;
+}
+.glass-nav h1{
+  font-size:clamp(15px,2.2vw,21px);
+  font-weight:650;letter-spacing:-0.025em;
+  color:var(--text);line-height:1.2;
+}
+.glass-nav .tag{
+  font-size:11.5px;font-weight:600;color:var(--accent);
+  background:rgba(0,113,227,.08);padding:2px 9px;
+  border-radius:var(--r-pill);white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.glass-nav .spacer{flex:1}
+.glass-nav .subtitle{
+  font-size:12.5px;color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.glass-nav .theme-btn{
+  position:relative;/* overflow:visible so the expansion ripple can escape
+                        the button bounds and cover the viewport. Icons use
+                        position:absolute with inset:0, which already keeps
+                        them inside the button's box. */
+  display:flex;align-items:center;justify-content:center;
+  width:32px;height:32px;padding:0;
+  border-radius:50%;border:none;
+  background:transparent;color:var(--text-2);cursor:pointer;
+  transition:background .2s var(--ease-out-quart), color .2s var(--ease-out-quart);
+}
+.glass-nav .theme-btn:hover{background:var(--hover);color:var(--text)}
+
+/* View Transitions API styling — used when the browser supports the
+   native animation (Chrome 111+, Edge 111+, etc). The browser snapshots
+   old and new visual states and cross-fades between them; we additionally
+   animate a clip-path via document.documentElement.animate() inside the
+   transition's `ready` callback for the "reveal from click point" effect.
+   The OLD/NEW pseudo-elements must NOT linger after the transition —
+   `transition.skipTransition()` is called from the WAAPI animation's
+   `finish` event, which is the cleanest way to dispose them. We also set
+   `pointer-events:none` so the snapshot layers never block pointer events. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+  pointer-events: none;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2147483646; }
+html.light::view-transition-old(root) { z-index: 2147483646; }
+html.light::view-transition-new(root) { z-index: 1; }
+/* Hard-hide the OLD snapshot the instant the WAAPI clip-path lands on
+   its final frame. Without this the OLD pseudo-element sits for one
+   frame after the transition completes, painting a residual flash
+   (especially visible on dark→light, where OLD is dark). NEW is left
+   alone — it's the final visible state and must stay opaque. */
+::view-transition-old(root) {
+  /* 260ms — finishes just before our WAAPI clip-path's 280ms ends. The
+     last frame is fully transparent so no flash paint can leak through. */
+  animation: vt-hide 260ms linear forwards;
+}
+@keyframes vt-hide { from { opacity: 1 } to { opacity: 0 } }
+
+/* JS fallback for browsers without View Transitions API. The veil is a
+   fixed-position rectangle that fills the viewport; we animate its
+   clip-path from `circle(0px ...)` (invisible) to `circle(Npx ...)` (full)
+   to reveal/hide the theme change from the click point. `display:none`
+   by default so the veil never paints when no transition is in flight;
+   `applyTheme()` sets `display:block` immediately before the animation. */
+.theme-veil{
+  position:fixed;inset:0;z-index:9999;pointer-events:none;
+  display:none;
+  clip-path:circle(0px at 50% 50%);
+  will-change:clip-path;
+}
+/* Two icons stacked — sun on top, moon behind. CSS swaps their visibility
+   on theme toggle so we never replace innerHTML (no flicker, no race). */
+.glass-nav .theme-btn .icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:transform .35s var(--ease-spring), opacity .35s var(--ease-spring)}
+.glass-nav .theme-btn .icon-moon{transform:rotate(0);opacity:1}
+.glass-nav .theme-btn .icon-sun{transform:rotate(-90deg);opacity:0}
+:root.dark .glass-nav .theme-btn .icon-moon{transform:rotate(90deg);opacity:0}
+:root.dark .glass-nav .theme-btn .icon-sun{transform:rotate(0);opacity:1}
+.glass-nav .theme-btn:hover .icon-moon{transform:rotate(15deg) scale(1.1)}
+:root.dark .glass-nav .theme-btn:hover .icon-sun{transform:rotate(15deg) scale(1.1)}
+/* Note: the expansion ripple is NOT a child ::after — see .theme-ripple
+   below. A child pseudo can't escape its parent at scale; instead we
+   inject a fixed-position element into <body> on click so the wave covers
+   the full viewport. */
+
+/* ── Main layout ── */
+.main{display:flex;flex:1;overflow:hidden;min-height:0}
+.panel{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;position:relative}
+.panel-right{
+  border-left:1px solid var(--hairline);
+  min-height:0;display:flex;flex-direction:column;
+  overflow:hidden;
+}
+/* Options section — pinned. Inner scroll holds the scrolling controls;
+   button bar is pinned at the bottom and always visible. */
+.options-section{
+  flex-shrink:1;flex-basis:auto;
+  display:flex;flex-direction:column;
+  border-bottom:1px solid var(--hairline);
+  background:var(--bg);
+  min-height:120px;
+  max-height:42vh;
+  overflow:hidden;
+}
+.options-scroll{
+  flex:1;min-height:0;
+  overflow-y:auto;overflow-x:hidden;
+}
+.options-scroll::-webkit-scrollbar{width:6px}
+.options-scroll::-webkit-scrollbar-thumb{background:var(--faint);border-radius:999px}
+/* Output section — fills remaining space, contains scrollable output */
+.output-section{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
+  overflow:hidden;position:relative;
+}
+.panel-header{
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  padding:clamp(12px,1.8vw,18px) var(--pad-x) clamp(6px,1vw,10px);
+  font-size:12.5px;font-weight:600;color:var(--text-2);letter-spacing:-0.01em;
+}
+.panel-header .badge{
+  font-size:11px;font-weight:500;color:var(--text-2);
+  background:var(--hover);padding:2px 9px;border-radius:var(--r-pill);
+  font-variant-numeric:tabular-nums;transition:color .2s, background .2s;
+}
+.panel-header .badge.status-ok{color:var(--live);background:rgba(48,209,88,.1)}
+.panel-header .badge.status-err{color:var(--danger);background:var(--danger-bg)}
+.panel-header .badge.status-warn{color:var(--warn);background:var(--warn-bg)}
+.panel-header .action,
+.panel-header .header-action{
+  font-size:12px;font-weight:500;color:var(--accent);
+  background:none;border:none;cursor:pointer;
+  padding:4px 8px;border-radius:var(--r-pill);transition:background .15s var(--ease-out-quart);
+}
+.panel-header .action:hover,
+.panel-header .header-action:hover{background:rgba(0,113,227,.08)}
+:root.dark .panel-header .action:hover,
+:root.dark .panel-header .header-action:hover{background:rgba(10,132,255,.15)}
+
+/* ── Editor (left panel) ── */
+.editor{
+  flex:1;min-height:0;position:relative;display:flex;gap:0;
+  padding:0 0 clamp(10px,1.5vw,14px) clamp(10px,1.5vw,14px);
+  overflow:hidden;
+}
+/* Gutter — column of line numbers. Sizes come from JS-measured CSS
+   variables on :root so they're guaranteed to match the textarea. */
+.editor-gutter{
+  flex:none;width:48px;overflow:hidden;user-select:none;
+  text-align:right;color:var(--text-4);
+  font-family:var(--mono);
+  font-size:var(--editor-font-size, 13px);
+  line-height:var(--editor-line-height, 22.1px);
+  background:var(--hover);
+  border:1px solid var(--hairline);border-right:none;
+  border-radius:var(--r-card) 0 0 var(--r-card);
+  padding:0;
+  position:relative;
+}
+.editor-gutter-inner{
+  /* JS-set translateY; padding-top applied to inner so the first
+     line number aligns exactly with the textarea's first line. */
+  padding-top:var(--editor-padding-top, 12px);
+  transform:translateY(0);
+  will-change:transform;
+}
+.editor-gutter-inner > div{
+  height:var(--editor-line-height, 22.1px);
+  padding:0 10px 0 0;
+  display:flex;align-items:center;justify-content:flex-end;
+  font-variant-numeric:tabular-nums;
+}
+.editor-input-wrap{
+  flex:1;position:relative;
+  margin-right:clamp(10px,1.5vw,14px);
+  border:1px solid var(--hairline);border-left:none;
+  border-radius:0 var(--r-card) var(--r-card) 0;
+  background:var(--hover);
+  min-height:0;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+/* Focus ring wraps both gutter + wrap together as one unit (inset shadow,
+   not border-color swap — keeps the layout from jumping by 1px) */
+.editor:focus-within .editor-gutter,
+.editor:focus-within .editor-input-wrap{
+  border-color: var(--hairline);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Scroll container owns the scrollbar — both highlight overlay and
+   textarea live inside it, sharing one scroll source. Wheel speed
+   is identical for code, highlight, and gutter. */
+.editor-scroll{
+  flex:1;min-height:0;overflow:auto;
+  position:relative;
+}
+/* Highlight overlay: stretches to match the textarea's box.
+   No `bottom` value → height is content-driven (auto), so it grows with
+   the textarea and scrolls naturally with the .editor-scroll container. */
+.editor-highlight{
+  position:absolute;top:0;left:0;right:0;bottom:auto;
+  margin:0;
+  padding:var(--editor-padding-top,12px) var(--editor-padding-right,14px) var(--editor-padding-bottom,12px) var(--editor-padding-left,14px);
+  font-family:var(--mono);
+  font-size:var(--editor-font-size,13px);
+  line-height:var(--editor-line-height,22.1px);
+  white-space:pre-wrap;word-wrap:break-word;
+  color:var(--text);
+  background:transparent;
+  pointer-events:none;
+  z-index:1;
+  width:100%;
+  box-sizing:border-box;
+}
+.editor-highlight code{display:block;font-family:inherit}
+textarea#code-input{
+  display:block;
+  width:100%;
+  background:transparent;color:transparent;
+  caret-color:var(--text);
+  border:none;border-radius:0 var(--r-card) var(--r-card) 0;
+  padding:var(--editor-padding-top,12px) var(--editor-padding-right,14px) var(--editor-padding-bottom,12px) var(--editor-padding-left,14px);
+  font-family:var(--mono);
+  font-size:var(--editor-font-size,13px);
+  line-height:var(--editor-line-height,22.1px);
+  resize:none;outline:none;tab-size:2;
+  z-index:2;
+  position:relative;
+  white-space:pre-wrap;word-wrap:break-word;
+  /* overflow must be hidden so the native textarea scrollbar never appears
+     (the .editor-scroll wrapper owns scrolling). But "height:auto; overflow:
+     hidden" on a <textarea> causes the textarea to NOT auto-grow with content,
+     so the visible caret drifts away from the gutter/highlight rows. Fix:
+     set the height explicitly to scrollHeight every input — see
+     syncEditorMetrics() which now writes textarea.style.height to
+     textarea.scrollHeight + 'px' so the textarea always grows with content
+     and stays aligned with the highlight/gutter layer. */
+  overflow:hidden;
+  box-sizing:border-box;
+  height:0;
+  min-height:100%;
+}
+textarea#code-input::placeholder{color:var(--text-4)}
+/* Focus visual is on the wrap (single ring) — textarea itself stays borderless */
+textarea#code-input:focus{box-shadow:none}
+textarea#code-input::selection{background:rgba(0,113,227,.28);color:var(--text)}
+
+/* ── Lua syntax tokens ── */
+.tok-keyword{color:var(--indigo)}
+.tok-keyword2{color:#c2185b}
+.tok-builtin{color:var(--accent)}
+.tok-string{color:var(--live)}
+.tok-number{color:var(--warn)}
+.tok-comment{color:var(--text-3);font-style:italic}
+.tok-operator{color:var(--text-2)}
+.tok-punct{color:var(--text-3)}
+:root.dark .tok-keyword{color:#d57dff}
+:root.dark .tok-keyword2{color:#ff8ab8}
+:root.dark .tok-builtin{color:#6cb6ff}
+
+/* ── Editor a11y — three mandatory media queries ── */
+@media (prefers-reduced-motion: reduce) {
+  .editor-gutter-inner,
+  .editor-highlight,
+  textarea#code-input { transition: none !important; animation: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .editor-gutter,
+  .editor-input-wrap { background: var(--surface); }
+  textarea#code-input::selection { background: rgba(0,113,227,.45); }
+}
+@media (prefers-contrast: more) {
+  .editor-gutter,
+  .editor-input-wrap { background: var(--surface); border-color: rgba(0,0,0,.35); }
+  .editor:focus-within .editor-gutter,
+  .editor:focus-within .editor-input-wrap { box-shadow: inset 0 0 0 2px var(--accent); }
+  textarea#code-input::selection { background: rgba(0,113,227,.55); color: var(--text); }
+}
+
+/* ── Unified panel (Apple style — single white surface, hairline dividers) ── */
+.unified-panel{
+  background:var(--surface);border-radius:var(--r-card);
+  box-shadow:var(--sh-panel);overflow:hidden;
+  margin:0 var(--pad-x) clamp(8px,1.2vw,12px);
+}
+.options-section .unified-panel{margin:0 clamp(14px,2.2vw,18px) clamp(8px,1.2vw,12px)}
+.unified-panel .row{
+  display:flex;align-items:center;gap:12px;
+  padding:clamp(10px,1.5vw,14px) clamp(17px,3vw,24px);
+  color:var(--text);text-decoration:none;
+  transition:background .15s var(--ease-out-quart);cursor:pointer;
+}
+.unified-panel .row:hover{background:var(--hover)}
+.unified-panel .row+.row{border-top:1px solid var(--hairline)}
+.unified-panel .row .row-label{font-size:12.5px;font-weight:500;color:var(--text-2);min-width:56px;flex-shrink:0}
+.unified-panel .row .row-content{flex:1;min-width:0}
+.unified-panel .row .row-value{font-size:12.5px;font-weight:500;color:var(--text-3);font-variant-numeric:tabular-nums}
+.unified-panel .row .row-action{
+  font-size:12px;color:var(--accent);cursor:pointer;
+  background:none;border:none;padding:4px 8px;border-radius:var(--r-pill);transition:background .15s var(--ease-out-quart);
+}
+.unified-panel .row .row-action:hover{background:rgba(0,113,227,.08)}
+.unified-panel .section-title{
+  padding:clamp(12px,1.8vw,16px) clamp(17px,3vw,24px) clamp(4px,0.8vw,8px);
+  font-size:11.5px;font-weight:600;color:var(--text-2);
+  text-transform:uppercase;letter-spacing:.04em;
+}
+
+/* ── Feature groups (created by JS) — per DESIGN §3 unified panel list ── */
+.feature-group{margin:0 var(--pad-x) clamp(10px,1.5vw,14px)}
+.feature-group:first-of-type{margin-top:clamp(4px,.6vw,8px)}
+.options-section .feature-group{margin:0 clamp(14px,2.2vw,18px) clamp(8px,1.2vw,12px)}
+.feature-group-title{
+  padding:clamp(6px,1vw,10px) clamp(2px,.5vw,4px) clamp(4px,.6vw,8px);
+  font-size:10.5px;font-weight:600;color:var(--text-2);
+  text-transform:uppercase;letter-spacing:.06em;
+}
+
+/* ── Feature list — ONE white panel + hairlines (no 2-col grid) ── */
+.options-section .feature-group .feature-list{
+  background:var(--surface);border-radius:var(--r-card);
+  box-shadow:var(--sh-panel);overflow:hidden;
+  border:1px solid var(--hairline);
+}
+.feature-list .feature-toggle{
+  padding:10px clamp(14px,2vw,18px);
+  display:flex;align-items:center;gap:12px;
+  cursor:pointer;transition:background .15s var(--ease-out-quart);user-select:none;
+  background:transparent;min-width:0;
+  min-height:44px;
+}
+.feature-list .feature-toggle:hover{background:var(--hover)}
+.feature-list .feature-toggle + .feature-toggle{border-top:1px solid var(--hairline)}
+.feature-list .feature-toggle .feat-info{
+  flex:1;min-width:0;display:flex;align-items:center;gap:10px;
+}
+.feature-list .feature-toggle .feat-name{
+  font-size:13px;font-weight:500;color:var(--text);letter-spacing:-0.01em;
+  line-height:1.3;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.feature-list .feature-toggle .feat-desc{
+  font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;
+  flex-shrink:0;padding-left:8px;
+}
+/* iOS-style toggle switch (DESIGN: 26px tall, 44px hit area).
+   Track + thumb share a single 0.22s duration so the green fill arrives
+   at the same time the thumb settles. */
+.feature-list .feature-toggle input[type=checkbox]{
+  appearance:none;-webkit-appearance:none;
+  position:relative;
+  width:40px;height:24px;flex-shrink:0;
+  border-radius:999px;
+  background:var(--track);
+  cursor:pointer;
+  transition:background .22s var(--ease-out-quart);
+}
+.feature-list .feature-toggle input[type=checkbox]::after{
+  content:"";position:absolute;
+  top:3px;left:3px;
+  width:18px;height:18px;border-radius:50%;
+  background:var(--surface);
+  box-shadow:0 1px 3px rgba(0,0,0,.15), 0 0 0 .5px rgba(0,0,0,.05);
+  transition:transform .22s var(--ease-spring);
+}
+.feature-list .feature-toggle input[type=checkbox]:checked{background:var(--live)}
+.feature-list .feature-toggle input[type=checkbox]:checked::after{transform:translateX(16px)}
+.feature-list .feature-toggle.on .feat-name{color:var(--text)}
+
+/* ── Whitelist inputs (DESIGN: radius tier --r-thumb, focus halo floats above panel) ── */
+.whitelist{padding:clamp(10px,1.4vw,14px) clamp(17px,3vw,24px);display:flex;flex-direction:column;gap:10px}
+.whitelist .whitelist-row{display:flex;flex-direction:column;gap:6px}
+.whitelist label{
+  display:block;font-size:11px;font-weight:600;color:var(--text-2);
+  letter-spacing:-0.005em;
+}
+.whitelist input{
+  width:100%;padding:8px 12px;
+  border-radius:var(--r-thumb);                  /* 12px — matches Apple inputs */
+  border:1px solid var(--hairline); background:var(--hover); color:var(--text);
+  font-size:12.5px;font-family:var(--mono); outline:none;
+  position:relative;                              /* lift z-index above .unified-panel */
+  transition:
+    border-color .15s var(--ease-out-quart),
+    background .15s var(--ease-out-quart),
+    box-shadow .15s var(--ease-out-quart);
+}
+.whitelist input:hover{border-color:rgba(0,0,0,.18)}
+.whitelist input:focus{
+  border-color:var(--accent);
+  background:var(--surface);
+  box-shadow:0 0 0 3px rgba(0,113,227,.18);
+  z-index:1;                                       /* halo not clipped by panel overflow:hidden */
+}
+
+/* ── Segmented control with sliding pill (Apple HIG per DESIGN §5) ── */
+.seg{
+  display:flex; background:var(--track);
+  border-radius:var(--r-pill); padding:3px;
+  margin:0 clamp(14px,2.2vw,18px) clamp(10px,1.4vw,14px);
+  position:relative; overflow:hidden;
+}
+.seg button{
+  position:relative; z-index:1;
+  border:none; cursor:pointer;
+  font-size:12.5px; font-weight:500;
+  padding:6px 16px; border-radius:var(--r-pill);
+  background:transparent; color:var(--text-2);
+  transition:color .22s var(--ease-out-quart);
+  font-family:inherit; white-space:nowrap;
+}
+.seg button:hover:not(.on){color:var(--text)}
+.seg button.on{color:var(--text);font-weight:600}
+/* Sliding pill — compositor-friendly (transform only, no left/width). */
+.seg::after{
+  content:""; position:absolute;
+  top:3px; bottom:3px;
+  left:0;
+  /* JS sets --pill-x (translateX), --pill-w (width), --pill-s (scaleX 0→1).
+     width is set once on resize/font-load and never animates; only transform
+     animates, so each frame hits the compositor (no layout/paint). */
+  width:var(--pill-w, 0px);
+  border-radius:var(--r-pill);
+  background:var(--surface);
+  box-shadow:0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.05);
+  transform:translateX(var(--pill-x, 0)) scaleX(var(--pill-s, 0)) translateZ(0);
+  transform-origin:left center;
+  transition:transform .22s var(--ease-spring);
+  z-index:0; pointer-events:none;
+  will-change:transform;
+}
+:root.dark .seg::after{
+  background:var(--surface);
+  box-shadow:0 1px 3px rgba(0,0,0,.4), 0 0 0 .5px rgba(255,255,255,.08);
+}
+
+/* ── Action bar — primary + icon group + danger ── */
+.btn-group{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:clamp(8px,1.2vw,12px) clamp(14px,2.2vw,18px);
+  border-top:1px solid var(--hairline);
+  flex-shrink:0;
+  align-items:center;
+}
+.btn-group .btn-primary{flex:1;min-width:120px}
+/* Icon-only buttons -- compact 28x28 touch target inside cluster */
+.btn-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;min-width:0;
+  border-radius:50%;
+  background:transparent;border:none;
+  color:var(--text-2);cursor:pointer;
+  transition:
+    background .15s var(--ease-out-quart),
+    color .15s var(--ease-out-quart);
+  flex-shrink:0;position:relative;
+}
+.btn-icon:hover{background:var(--surface);color:var(--text)}
+.btn-icon:active{transform:scale(.92);transition:transform .08s var(--ease-out-quart)}
+.btn-icon .ic{color:currentColor;display:block}
+
+/* Compact icon button group -- hairline-outlined stadium (DESIGN icons.md) */
+.btn-cluster{
+  display:inline-flex;gap:0;align-items:center;
+  padding:2px;height:32px;
+  background:var(--hover);
+  border-radius:var(--r-pill);
+  box-shadow:inset 0 0 0 1px var(--hairline);
+}
+.btn-cluster .btn-icon + .btn-icon{
+  box-shadow:-1px 0 0 var(--hairline);
+}
+/* Base icon class -- inherits currentColor; display:block prevents the
+   line-box baseline shift that misaligned icons with text. */
+.ic{display:block;color:var(--text-3);flex-shrink:0}
+.btn .ic{color:currentColor}{transform:scale(.96);transition:transform .08s var(--ease-out-quart)}
+
+/* Base — solid white surface per DESIGN spec. 32px tall aligns with cluster. */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  height:32px;padding:0 14px;gap:5px;
+  border-radius:var(--r-pill);
+  font-size:12.5px;font-weight:550;font-family:inherit;
+  cursor:pointer;
+  background:var(--surface);
+  border:1px solid var(--hairline);
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
+  color:var(--text);
+  transition:
+    transform .22s var(--ease-out-quart),
+    box-shadow .22s var(--ease-out-quart),
+    background .15s var(--ease-out-quart),
+    color .15s var(--ease-out-quart),
+    border-color .15s var(--ease-out-quart);
+}
+:root.dark .btn{border-color:rgba(255,255,255,.12);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);border-color:rgba(0,0,0,.12)}
+:root.dark .btn:hover{border-color:rgba(255,255,255,.2);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.btn:active{transform:scale(.96);box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .08s var(--ease-out-quart)}
+
+/* Primary — solid Apple blue */
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.btn-primary:hover{background:var(--accent-link);box-shadow:0 4px 14px rgba(0,113,227,.35)}
+:root.dark .btn-primary{box-shadow:0 2px 8px rgba(10,132,255,.3)}
+:root.dark .btn-primary:hover{box-shadow:0 4px 16px rgba(10,132,255,.45)}
+
+/* Ghost — legacy name kept for back-compat with elements that still use it.
+   New secondary buttons should use .btn-secondary (visible surface). */
+.btn-ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--text-2)}
+.btn-ghost:hover{background:var(--hover);color:var(--text);transform:none;box-shadow:none;border-color:transparent}
+:root.dark .btn-ghost:hover{background:rgba(255,255,255,.07)}
+
+/* Secondary — text+icon buttons that sit alongside the primary. Same
+   surface as .btn but with neutral text color, no accent. */
+.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--hairline);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.btn-secondary:hover{background:var(--hover);color:var(--text);border-color:rgba(0,0,0,.12)}
+:root.dark .btn-secondary:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2)}
+
+/* Danger — text-only, no solid fill */
+.btn-danger{color:var(--danger);border-color:color-mix(in srgb, var(--danger) 20%, transparent);background:transparent;box-shadow:none}
+.btn-danger:hover{background:var(--danger-bg);color:var(--danger);transform:none;box-shadow:none}
+
+/* ── Stats bar ── */
+.stats{
+  display:flex;gap:clamp(12px,2vw,20px);
+  padding:clamp(8px,1.2vw,12px) var(--pad-x);
+  font-size:12px;color:var(--text-2);flex-shrink:0;
+  font-variant-numeric:tabular-nums;
+  border-top:1px solid var(--hairline);
+}
+
+/* ── Output panel (white surface per DESIGN spec — NOT glass, NOT hover tint).
+   Matches `.unified-panel` / `.feature-list` radius & shadow tier so the
+   three white surfaces read as a coherent family. */
+.output-sink{
+  flex:1;min-height:0;overflow:auto;
+  margin:0 clamp(14px,2.2vw,18px) clamp(10px,1.5vw,14px);
+  padding:clamp(14px,2vw,18px) clamp(17px,3vw,22px);
+  background:var(--surface);
+  border-radius:var(--r-card);
+  box-shadow:var(--sh-panel);
+  font-family:var(--mono);font-size:13px;line-height:1.7;
+  white-space:pre-wrap;word-break:break-word;
+  color:var(--text);
+}
+.output-sink::-webkit-scrollbar{width:6px}
+.output-sink::-webkit-scrollbar-thumb{background:var(--faint);border-radius:var(--r-pill)}
+.output-sink::-webkit-scrollbar-thumb:hover{background:var(--text-4)}
+.output-sink > * { display:block; }
+.output-sink > * + * { margin-top:2px; }
+.output-sink .info{color:var(--accent)}
+.output-sink .success{color:var(--live)}
+.output-sink .error{color:var(--danger)}
+.output-sink .warn{color:var(--warn)}
+.output-sink .dim{color:var(--text-3)}
+/* Highlighted code in output — flat, no inner panel, full-width surface */
+.output-sink .output-code{
+  margin:4px 0 6px !important;
+  padding:0;
+  font-size:12.5px;line-height:1.65;
+  white-space:pre-wrap;word-break:break-word;
+  color:var(--text);
+  display:block !important;
+}
+.output-sink .placeholder{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;height:100%;min-height:140px;
+  color:var(--text-3);font-family:var(--font);font-size:13px;
+  gap:8px;
+}
+.output-sink .placeholder-icon{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--hover);display:flex;align-items:center;justify-content:center;
+  margin-bottom:2px;color:var(--text-2);
+  flex-shrink:0;
+}
+.output-sink .placeholder-icon svg{display:block}
+.output-sink .placeholder-title{font-size:13px;color:var(--text-3);font-weight:500;letter-spacing:-0.005em}
+.output-sink .placeholder-hint{font-size:12px;color:var(--text-4);margin-top:2px}
+
+/* ── Loading overlay (full-screen glass card) ── */
+.loading-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.18);
+  backdrop-filter:saturate(180%) blur(8px);
+  -webkit-backdrop-filter:saturate(180%) blur(8px);
+  z-index:100;align-items:center;justify-content:center;
+  transition:opacity .25s var(--ease-out-quart);
+  opacity:0;
+}
+.loading-overlay.show{display:flex;opacity:1}
+.loading-card{
+  background:rgba(255,255,255,.85);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-radius:var(--r-hero);
+  padding:28px 36px 24px;
+  display:flex;flex-direction:column;align-items:center;gap:18px;
+  min-width:220px;max-width:320px;
+  box-shadow:var(--sh-overlay);
+  border:1px solid var(--hairline);
+  transform:scale(.96);
+  transition:transform .35s var(--ease-spring);
+}
+.loading-overlay.show .loading-card{transform:scale(1)}
+:root.dark .loading-card{background:rgba(44,44,46,.85);border-color:rgba(255,255,255,.1)}
+.spinner{
+  width:28px;height:28px;border:2px solid var(--track);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay .loading-text{
+  font-size:14px;font-weight:600;color:var(--text);
+  text-align:center;letter-spacing:-0.01em;
+}
+.loading-overlay .loading-sub{
+  font-size:12px;color:var(--text-2);text-align:center;margin-top:-10px;
+}
+.loading-overlay .cancel-btn{
+  height:32px;padding:0 16px;
+  background:transparent;color:var(--text-2);border:1px solid var(--hairline);
+  border-radius:var(--r-pill);font-size:12.5px;font-weight:500;
+  font-family:inherit;cursor:pointer;
+  transition:background .15s var(--ease-out-quart), color .15s var(--ease-out-quart), border-color .15s var(--ease-out-quart), transform .15s var(--ease-out-quart);
+  margin-top:4px;
+}
+.loading-overlay .cancel-btn:hover{background:var(--hover);color:var(--text);border-color:var(--text-4)}
+.loading-overlay .cancel-btn:active{transform:scale(.97)}
+
+/* ── Footer ── */
+footer{
+  flex-shrink:0;padding:10px var(--pad-x);
+  font-size:12px;color:var(--text-3);
+  text-align:center;border-top:1px solid var(--hairline);
+}
+footer a{color:var(--accent);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* ── Batch file list ── */
+.batch-header{padding:clamp(8px,1.2vw,12px) var(--pad-x) 0;font-size:12px;font-weight:500;color:var(--text-2)}
+.batch-actions{display:flex;gap:6px;flex-wrap:wrap;padding:clamp(6px,1vw,10px) var(--pad-x);flex-shrink:0}
+.batch-file-row{
+  display:flex;align-items:center;gap:10px;
+  padding:clamp(8px,1.2vw,10px) var(--pad-x);
+  border-top:1px solid var(--hairline);font-size:13px;transition:background .15s var(--ease-out-quart);
+}
+.batch-file-row:hover{background:var(--hover)}
+.batch-file-row .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.batch-file-row .fsize{color:var(--text-2);font-size:11.5px;min-width:50px;text-align:right;font-variant-numeric:tabular-nums}
+.batch-file-row .fstatus{font-size:11px;padding:2px 8px;border-radius:var(--r-pill);min-width:50px;text-align:center}
+.batch-file-row .fstatus.pending{background:var(--hover);color:var(--text-2)}
+.batch-file-row .fstatus.done{background:rgba(48,209,88,.1);color:var(--live)}
+.batch-file-row .fstatus.error{background:var(--danger-bg);color:var(--danger)}
+.batch-file-row .fstatus.processing{color:var(--accent);animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.batch-file-row .fbtn{background:none;border:none;color:var(--text-2);cursor:pointer;padding:2px 6px;font-size:13px;border-radius:var(--r-chip);transition:background .15s var(--ease-out-quart), color .15s var(--ease-out-quart)}
+.batch-file-row .fbtn:hover{color:var(--danger);background:var(--danger-bg)}
+.batch-file-row .fbtn-dl{color:var(--accent);background:none;border:none;cursor:pointer;padding:2px 6px;font-size:13px;border-radius:var(--r-chip);transition:background .15s var(--ease-out-quart)}
+.batch-file-row .fbtn-dl:hover{background:rgba(0,113,227,.08)}
+
+/* ── Resizer ── */
+.resizer{width:4px;background:transparent;cursor:col-resize;flex-shrink:0;transition:background .15s var(--ease-out-quart);z-index:10}
+.resizer:hover,.resizer.active{background:var(--accent)}
+
+/* ── Mobile drawer ── */
+.mobile-drawer-btn{
+  display:none;
+  align-items:center;justify-content:center;
+  width:32px;height:32px;padding:0;
+  border:none;background:transparent;
+  color:var(--text-2);cursor:pointer;
+  border-radius:var(--r-chip);
+  transition:background .15s var(--ease-out-quart), color .15s var(--ease-out-quart);
+}
+.mobile-drawer-btn:hover{background:var(--hover);color:var(--text)}
+.drawer-scrim{
+  display:none;
+  position:fixed;inset:0;z-index:49;
+  background:rgba(0,0,0,.28);
+  backdrop-filter:blur(2px);
+  -webkit-backdrop-filter:blur(2px);
+  opacity:0;pointer-events:none;
+  transition:opacity .25s var(--ease-out-quart);
+}
+.drawer-scrim.open{opacity:1;pointer-events:auto}
 @media(max-width:768px){
-  body{height:auto;min-height:100vh;overflow:auto;-webkit-overflow-scrolling:touch}
+  .mobile-drawer-btn{display:flex}
+  .drawer-scrim{display:block}
+}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  body{height:auto;min-height:100vh;overflow:auto}
   .main{flex-direction:column;overflow:visible}
-  .panel{border-right:none;border-bottom:1px solid var(--border);flex:none}
-  .panel#panel-left{flex:none;height:40vh;min-height:200px}
-  .panel#panel-right{flex:1;min-height:50vh}
-  .resizer{width:100%;height:4px;cursor:row-resize;display:none}
-  .editor{flex:1;min-height:0}
-  .output-area{min-height:120px}
-  header{flex-wrap:wrap;gap:8px;padding:6px 12px}
-  header h1{font-size:14px}
-  header .tag{font-size:10px}
-  header span:last-of-type{display:none}
-  .controls{padding:8px}
-  .controls-row label{font-size:10px;padding:3px 6px}
-  .btn-row{padding:6px 8px}
-  button{font-size:10px;padding:4px 8px}
-  .stats{flex-wrap:wrap;gap:8px;padding:4px 8px}
-  .footer{padding:6px 10px;font-size:10px}
+  .panel{flex:none}
+  #panel-left{height:42vh;min-height:220px;order:1}
+  #panel-right{
+    flex:1;display:flex;flex-direction:column;min-height:60vh;order:2;
+    overflow-y:auto;overflow-x:hidden;border-left:none;
+    position:relative;
+    transform:translateY(0);
+    transition:transform .35s var(--ease-spring);
+  }
+  body.drawer-open #panel-right{
+    transform:translateY(-30px) scale(.99);
+  }
+  .resizer{display:none}
+  .editor{flex:1;min-height:0;padding:0 0 10px 10px}
+  .editor-input-wrap{margin-right:10px}
+  .output-sink{flex-shrink:0;overflow:auto;min-height:30vh}
+  .glass-nav{flex-wrap:nowrap;gap:8px;padding:0 12px;height:48px;min-height:48px}
+  .glass-nav h1{font-size:14px}
+  .glass-nav .subtitle{display:none}
+  .glass-nav .tag{font-size:10.5px;padding:2px 7px}
+  .btn{height:40px;padding:0 14px;font-size:12.5px}
+  .stats{flex-wrap:wrap;gap:8px}
+  .options-section .unified-panel{margin:0 12px 10px}
+  .options-section .feature-group{margin:0 12px 10px}
+  .btn-group{padding:10px 12px 12px;gap:5px}
+  .output-section .stats{padding:6px 14px 10px}
+  .output-sink{margin:0 14px 10px}
+  .panel-header{padding:10px 14px 6px}
+  .feature-grid{grid-template-columns:1fr}
+  .feature-list .feature-toggle{padding:10px 14px}
+  .seg{margin:0 14px 10px}
+  .seg button{padding:7px 12px;font-size:12px}
 }
 @media(max-width:480px){
-  .panel#panel-left{height:35vh;min-height:160px}
-  header h1{font-size:13px}
-  .controls-row{gap:4px}
-  .controls-row label{font-size:9px;padding:2px 5px}
-  .btn-row{gap:4px;padding:4px 6px}
-  button{font-size:9px;padding:3px 6px}
-  textarea{font-size:12px;padding:8px}
-  .output-area{font-size:12px;padding:8px}
+  #panel-left{height:38vh;min-height:200px}
+  #panel-right{min-height:50vh}
+  textarea#code-input{font-size:12px;padding:12px 14px}
+  .glass-nav{padding:0 10px;gap:6px}
+  .glass-nav h1{font-size:13px}
+  .glass-nav .tag{display:none}
+  .seg{flex-wrap:wrap;gap:4px;margin:0 10px 8px}
+  /* When segmented control wraps to multiple rows, the sliding pill would
+     point at the wrong row. Hide it and let buttons render as plain chips. */
+  .seg::after{display:none}
+  .seg button{background:var(--surface);border:1px solid var(--hairline);padding:5px 12px}
+  .seg button.on{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+  .seg button{padding:7px 10px;font-size:11.5px}
+  .options-section .unified-panel{margin:0 10px 8px;border-radius:var(--r-card)}
+  .options-section .feature-group{margin:0 10px 8px}
+  .btn-group{padding:8px 10px 10px;gap:4px}
+  .btn-group .btn{padding:0 10px;font-size:12px;height:36px}
+  .output-section .stats{padding:6px 12px 8px;font-size:11px}
+  .output-sink{margin:0 12px 8px;font-size:12px}
+  .panel-header{padding:8px 12px 4px;font-size:12px}
+  .loading-card{padding:22px 28px 18px;min-width:200px}
+  .loading-overlay .loading-text{font-size:13px}
 }
 
-/* Batch mode */
-.drop-zone{margin:12px;padding:32px;border:2px dashed var(--border);border-radius:8px;text-align:center;color:var(--fg2);cursor:pointer;transition:all .2s;flex-shrink:0}
-.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);color:var(--accent);background:rgba(88,166,255,.05)}
-.drop-zone input{display:none}
-.file-list{flex:1;overflow:auto;padding:8px}
-.file-item{display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:4px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;font-size:12px}
-.file-item .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
-.file-item .fsize{color:var(--fg2);font-size:11px;min-width:60px;text-align:right}
-.file-item .fstatus{font-size:11px;padding:2px 8px;border-radius:3px;min-width:60px;text-align:center}
-.file-item .fstatus.pending{background:var(--bg3);color:var(--fg2)}
-.file-item .fstatus.done{background:rgba(63,185,80,.15);color:var(--accent2)}
-.file-item .fstatus.error{background:rgba(248,81,73,.15);color:var(--err)}
-.file-item .fstatus.processing{background:rgba(88,166,255,.15);color:var(--accent)}
-.file-item .fbtn{background:none;border:none;color:var(--fg2);cursor:pointer;padding:2px 6px;font-size:14px}
-.file-item .fbtn:hover{color:var(--err)}
-.batch-actions{display:flex;gap:6px;padding:8px 12px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
-.batch-stats{padding:6px 12px;background:var(--bg3);border-top:1px solid var(--border);font-size:11px;color:var(--fg2);flex-shrink:0}
-.footer{background:var(--bg2);border-top:1px solid var(--border);padding:6px 16px;font-size:11px;color:var(--fg2);text-align:center;flex-shrink:0;width:100%}
+/* ── Motion & accessibility (three reduced-motion signals) ── */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+  }
+  /* Startup animations: snap to resting state. The `both` fill mode plus
+     ~0s duration guarantees the final keyframe is what paints. */
+  .enter-nav,.enter-panel,.enter-cta{
+    animation-duration:.01ms!important;
+    animation-delay:0s!important;
+  }
+  .spinner{animation:none;border-top-color:var(--text-3)}
+}
+@media(prefers-reduced-transparency:reduce){
+  .glass-nav,.loading-overlay{
+    background:var(--surface)!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+}
+@media(prefers-contrast:more){
+  .glass-nav,.loading-overlay{
+    background:var(--surface)!important;
+    border:1px solid rgba(0,0,0,.35)!important;
+  }
+  /* Reinforce borders on the controls for high-contrast users */
+  .seg,.feature-list,.unified-panel,.output-sink,
+  .btn,.btn-cluster,.btn-icon,.whitelist input{
+    border-color:rgba(0,0,0,.55)!important;
+  }
+  .feature-list .feature-toggle input[type=checkbox]:checked{
+    outline:1px solid var(--text);
+    outline-offset:-2px;
+  }
+}
 </style>
 </head>
 <body>
-<header>
-  <h1>Lua Obfuscator & VM</h1>
-  <span class="tag">v3.0.0</span>
-  <span style="flex:1"></span>
-  <span style="font-size:12px;color:var(--fg2)">集成 Fengari Lua VM · 10 种混淆技术</span>
-</header>
+<header class="glass-nav enter-nav" id="glass-nav">
+  <div class="logo">L</div>
+  <h1>Lua Obfuscator</h1>
+  <span class="tag">v3.4.0</span>
+  <span class="spacer"></span>
+  <button class="theme-btn" id="theme-toggle" title="切换主题" aria-label="切换主题">
+    <span class="icon icon-moon" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0  21 12.79z"/></svg>
+    </span>
+    <span class="icon icon-sun" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="4.22" x2="19.78" y2="5.64"/></svg>
+    </span>
+  </button>
+  </header>
 <div class="main">
   <!-- 左：代码编辑器 -->
-  <div class="panel" id="panel-left">
+  <div class="panel enter-panel" id="panel-left" style="animation-delay:.18s">
     <div class="panel-header">
       <span>源代码</span>
       <span class="badge" id="line-count">0 行</span>
     </div>
-    <div class="editor">
-      <textarea id="code-input" spellcheck="false" placeholder="在此输入 Lua 代码...">-- 示例：斐波那契数列
+    <div class="editor" id="editor">
+      <div class="editor-gutter" id="editor-gutter"></div>
+      <div class="editor-input-wrap">
+        <div class="editor-scroll" id="editor-scroll">
+          <pre class="editor-highlight" id="editor-highlight" aria-hidden="true"></pre>
+          <textarea id="code-input" spellcheck="false" placeholder="在此输入 Lua 代码..." autocapitalize="off" autocorrect="off">-- 示例：斐波那契数列
 local function fibonacci(n)
   if n <= 1 then
     return n
@@ -147,6 +1027,8 @@ print("Max retries: " .. max_retries)
 print("Timeout: " .. timeout_ms .. "ms")
 print("Pi: " .. pi_approx)
 print("Key: " .. string.format("0x%X", secret_key))</textarea>
+        </div>
+      </div>
     </div>
     <div class="stats">
       <span id="stat-left-lines">行: 0</span>
@@ -157,69 +1039,155 @@ print("Key: " .. string.format("0x%X", secret_key))</textarea>
   <div class="resizer" id="resizer"></div>
 
   <!-- 右：控制 + 输出 -->
-  <div class="panel" id="panel-right">
-    <div class="panel-header">
-      <span>混淆选项</span>
-      <button onclick="toggleAll()" style="font-size:11px;padding:3px 8px">全选/全不选</button>
-    </div>
-        <div class="controls">
-      <div class="controls-row" id="preset-row" style="margin-bottom:8px;align-items:center">
-        <span style="font-size:11px;color:var(--fg2);margin-right:6px">预设</span>
-        <label data-preset="fast"><input type="radio" name="preset" value="fast"> 快速</label>
-        <label class="on" data-preset="balanced"><input type="radio" name="preset" value="balanced" checked> 均衡</label>
-        <label data-preset="max"><input type="radio" name="preset" value="max"> 最强</label>
-        <label data-preset="custom"><input type="radio" name="preset" value="custom"> 自定义</label>
+  <div class="panel panel-right enter-panel" id="panel-right" style="animation-delay:.30s">
+    <div class="options-section" id="options-section">
+      <div class="options-scroll">
+        <div class="panel-header">
+          <span>混淆选项</span>
+          <button class="header-action" onclick="toggleAll()" title="全选或全不选所有 Pass">全选/全不选</button>
+        </div>
+        <!-- Preset segmented control (Apple style) -->
+        <div class="seg" id="preset-row">
+          <button data-preset="fast">快速</button>
+          <button class="on" data-preset="balanced">均衡</button>
+          <button data-preset="max">最强</button>
+          <button data-preset="custom">自定义</button>
+        </div>
+
+        <!-- Feature toggles -->
+        <div id="feature-toggles"></div>
+
+        <!-- Whitelist -->
+        <div class="unified-panel">
+          <div class="section-title">白名单</div>
+          <div class="whitelist">
+            <div class="whitelist-row">
+              <label for="name-whitelist">名称白名单</label>
+              <input id="name-whitelist" type="text" placeholder="keep_me, public_api">
+            </div>
+            <div class="whitelist-row">
+              <label for="string-whitelist">字符串白名单</label>
+              <input id="string-whitelist" type="text" placeholder="KEEP_PLAIN, ok">
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="controls-row" id="feature-toggles"></div>
-      <div class="controls-row" id="whitelist-row" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
-        <label style="display:block;background:transparent;border:none;padding:0;color:var(--fg2)">名称白名单（逗号分隔，不混淆这些标识符）
-          <input id="name-whitelist" type="text" placeholder="keep_me, public_api" style="width:100%;margin-top:4px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--fg);font-size:12px">
-        </label>
-        <label style="display:block;background:transparent;border:none;padding:0;color:var(--fg2)">字符串白名单（逗号分隔，精确匹配）
-          <input id="string-whitelist" type="text" placeholder="KEEP_PLAIN, ok" style="width:100%;margin-top:4px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--fg);font-size:12px">
-        </label>
+
+      <!-- Action bar — primary CTA + compact icon clusters + danger -->
+      <div class="btn-group enter-cta" style="animation-delay:.46s">
+        <button class="btn btn-primary" onclick="doObfuscate()" title="混淆">
+          <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z"/><path d="M3 7l9 5 9-5"/><path d="M12 22V12"/></svg>
+          <span>混淆</span>
+        </button>
+        <button class="btn btn-secondary" onclick="doCompare()" title="对比运行">
+          <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <span>对比</span>
+        </button>
+
+        <!-- Run cluster: 原代码 / 混淆后 — compact icon-only -->
+        <div class="btn-cluster" role="group" aria-label="运行">
+          <button class="btn-icon" onclick="doRunOriginal()" title="运行原代码" aria-label="运行原代码">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+          </button>
+          <button class="btn-icon" onclick="doRunObfuscated()" title="运行混淆后" aria-label="运行混淆后">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          </button>
+        </div>
+
+        <!-- File cluster: 导入 / 导出 -->
+        <div class="btn-cluster" role="group" aria-label="文件">
+          <button class="btn-icon" onclick="document.getElementById('file-import').click()" title="导入文件" aria-label="导入文件">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </button>
+          <input type="file" id="file-import" accept=".lua,.txt" multiple style="display:none" onchange="handleImport(event)">
+          <button class="btn-icon" onclick="exportResult()" title="导出结果" aria-label="导出结果">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>
+
+        <!-- Config cluster: 导出 / 导入配置 -->
+        <div class="btn-cluster" role="group" aria-label="配置">
+          <button class="btn-icon" onclick="exportConfig()" title="导出配置" aria-label="导出配置">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><polyline points="9 9 15 9 15 15 9 15 9 9"/></svg>
+          </button>
+          <button class="btn-icon" onclick="document.getElementById('config-import').click()" title="导入配置" aria-label="导入配置">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+          </button>
+          <input type="file" id="config-import" accept=".json,application/json" style="display:none" onchange="importConfig(event)">
+        </div>
+
+        <!-- Examples cluster -->
+        <div class="btn-cluster" role="group" aria-label="示例">
+          <button class="btn-icon" onclick="loadExample('basic')" title="基础示例" aria-label="基础示例">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+          </button>
+          <button class="btn-icon" onclick="loadExample('algo')" title="算法示例" aria-label="算法示例">
+            <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          </button>
+        </div>
+
+        <div style="flex:1"></div>
+
+        <button class="btn btn-danger" onclick="clearOutput()" title="清空输出" aria-label="清空输出">
+          <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><line x1="9" y1="6" x2="9" y2="3"/><line x1="15" y1="6" x2="15" y2="3"/></svg>
+          <span>清空</span>
+        </button>
       </div>
     </div>
-    <div class="btn-row">
-      <button class="primary" onclick="doObfuscate()">混淆</button>
-      <button onclick="doRunOriginal()">运行原代码</button>
-      <button onclick="doRunObfuscated()">运行混淆后</button>
-      <button onclick="doCompare()">对比运行</button>
-      <button onclick="document.getElementById('file-import').click()">导入文件</button>
-      <input type="file" id="file-import" accept=".lua,.txt" multiple style="display:none" onchange="handleImport(event)">
-      <button onclick="exportResult()">导出结果</button>
-      <button onclick="exportConfig()">导出配置</button>
-      <button onclick="document.getElementById('config-import').click()">导入配置</button>
-      <input type="file" id="config-import" accept=".json,application/json" style="display:none" onchange="importConfig(event)">
-      <button class="danger" onclick="clearOutput()">清空</button>
-      <button onclick="loadExample('basic')">基础示例</button>
-      <button onclick="loadExample('algo')">算法示例</button>
+    <div class="output-section">
+      <div class="panel-header">
+        <span>输出</span>
+        <span class="badge" id="output-status">就绪</span>
+      </div>
+      <div class="output-sink" id="output">
+        <div class="placeholder">
+          <div class="placeholder-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3"/><path d="M16 9l4 3-4 3"/><path d="M14 5l-4 14"/></svg>
+          </div>
+          <span class="placeholder-title">暂无输出</span>
+          <span class="placeholder-hint">点击「混淆」或「运行原代码」开始</span>
+        </div>
+      </div>
+      <div class="stats">
+        <span id="stat-obf-size">混淆后: -</span>
+        <span id="stat-ratio">膨胀比: -</span>
+        <span id="stat-time">耗时: -</span>
+      </div>
     </div>
-    <div class="panel-header">
-      <span>输出</span>
-      <span class="badge" id="output-status">就绪</span>
+  </div>
+
+  <!-- Loading overlay (full-screen, fixed) -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <span class="loading-text" id="loading-text">混淆中...</span>
+      <span class="loading-sub" id="loading-sub">正在处理您的代码</span>
+      <button class="cancel-btn" onclick="cancelObfuscate()">取消</button>
     </div>
-    <div class="output-area" id="output">
-      <span class="dim">点击 "运行原代码" 或 "混淆" 开始...</span>
-    </div>
-    <div class="stats">
-      <span id="stat-obf-size">混淆后: -</span>
-      <span id="stat-ratio">膨胀比: -</span>
-      <span id="stat-time">耗时: -</span>
-    </div>
-    <div id="loading-overlay" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px">
-      <div class="spinner" style="width:36px;height:36px;border:3px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:spin 0.8s linear infinite"></div>
-      <span id="loading-text" style="color:#c9d1d9;font-size:14px">混淆中...</span>
-      <button onclick="cancelObfuscate()" style="font-size:12px;padding:4px 12px;background:#f85149;color:white;border:none;border-radius:4px;cursor:pointer">取消</button>
-    </div>
+  </div>
 </div>
 </div>
-<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
 <!-- Footer -->
-<div class="footer">Lua Obfuscator v3.0.0 · Author: Rainy_qwq · <a href="https://github.com/Rainyqwq/Lua-Obfuscator" target="_blank" style="color:var(--accent)">GitHub</a> · MIT License</div>
+<footer>Lua Obfuscator v3.4.0 · <a href="https://github.com/Rainyqwq/Lua-Obfuscator" target="_blank">Rainy_qwq</a> · MIT License</footer>
 
 <!-- Fengari Lua VM (load early; FENGARI_SOURCE is inlined right after this tag by build_html.js for the Worker) -->
+<script>
+// Pre-paint theme: read localStorage and OS preference synchronously so
+// <html> already has the right class before first paint — no FOUC flash.
+// Falls back silently if anything throws (private mode, disabled storage).
+(function () {
+  try {
+    var saved = localStorage.getItem('theme');
+    var dark = saved === 'dark' ||
+               (saved !== 'light' && saved !== 'dark' &&
+                window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var c = document.documentElement.classList;
+    c.toggle('dark', !!dark);
+    c.toggle('light', !dark);
+  } catch (e) { /* ignore */ }
+})();
+</script>
 <script src="lib/fengari-web.js"></script>
 <script>
 // Inlined fengari source for the Web Worker (file://-safe; UMD root patched window->self)
@@ -239,7 +1207,10 @@ Copyright © 1994–2017 Lua.org, PUC-Rio.
 // Author: Rainy_qwq
 // Lua Obfuscator Engine (Fengari bridge)
 // ============================================================
-let _luaObfuscatorReady = false;
+let _luaObfuscatorReady = false;  // async obfuscation ready (worker + main thread)
+let _luaWorkerReady = false;      // worker initialized and accepting messages
+let _luaMainReady = false;        // main-thread Lua state initialized (for sync legacy path)
+let _luaInitError = null;
 
 // Return the inlined fengari source (UMD root patched window->self so it
 // works inside the blob Worker). No fetch/XHR -> file://-safe.
@@ -323,16 +1294,17 @@ function initLuaObfuscator() {
     status = lua.lua_pcall(L, 0, 0, 0);
     if (status !== lua.LUA_OK) throw new Error('wrapper init: ' + lua.lua_tojsstring(L, -1));
 
-    _luaObfuscatorReady = true;
+    _luaMainReady = true;
+    _luaObfuscatorReady = _luaWorkerReady;
     console.log('[LuaInit] OK');
   } catch (e) {
     const msg = '[LuaInit] FAILED: ' + e.message;
     console.error(msg);
+    _luaMainReady = false;
     _luaObfuscatorReady = false;
     _luaInitError = msg;
   }
 }
-let _luaInitError = null;
 
 // ============================================================
 // Web Worker for non-blocking obfuscation
@@ -478,11 +1450,30 @@ function initObfuscateWorker() {
           if (msg.options) {
             lua.lua_newtable(L);
             for (const [key, value] of Object.entries(msg.options)) {
-              // Only pass boolean options to Lua
+              // Preserve type — Lua set_config needs strings for vm_mode etc.,
+              // and tables for name_whitelist / string_whitelist arrays.
               if (typeof value === 'boolean') {
                 lua.lua_pushboolean(L, value);
-                lua.lua_setfield(L, -2, fengari.to_luastring(key));
+              } else if (typeof value === 'string') {
+                lua.lua_pushstring(L, fengari.to_luastring(value));
+              } else if (Array.isArray(value)) {
+                lua.lua_newtable(L);
+                value.forEach((item, i) => {
+                  if (typeof item === 'string') {
+                    lua.lua_pushstring(L, fengari.to_luastring(item));
+                  } else if (typeof item === 'number') {
+                    lua.lua_pushnumber(L, item);
+                  } else {
+                    lua.lua_pushboolean(L, !!item);
+                  }
+                  lua.lua_rawseti(L, -2, i + 1);
+                });
+              } else if (typeof value === 'number') {
+                lua.lua_pushnumber(L, value);
+              } else {
+                continue;
               }
+              lua.lua_setfield(L, -2, fengari.to_luastring(key));
             }
           } else {
             lua.lua_pushnil(L);
@@ -508,31 +1499,54 @@ function initObfuscateWorker() {
     };
   `;
   
+  // Construct worker via Blob URL — the only path that works under file://.
+  // Source-form constructor (new Worker(code, ...)) is blocked by Chrome's
+  // CSP under file:// because each file: URL is its own opaque origin, so
+  // the worker code can't inherit the page's origin and the browser rejects
+  // the constructor. The Blob URL gets its own opaque origin too, but the
+  // worker only needs to *send postMessage* back, not load resources — so it
+  // works. The "Unsafe attempt to load URL" warning is informational; the
+  // worker still runs correctly. This is the documented WebKit/Blink quirk
+  // when running from file:// (a desktop packaging step would convert this
+  // to a same-origin module worker).
   const blob = new Blob([workerCode], { type: 'application/javascript' });
-  _obfuscateWorker = new Worker(URL.createObjectURL(blob));
+  const workerUrl = URL.createObjectURL(blob);
+  _obfuscateWorker = new Worker(workerUrl);
+  // Worker has snapshotted the URL by construction; releasing the blob now
+  // prevents a small memory leak per Worker spawn (not catastrophic, but
+  // matters if the user cancels and re-runs obfuscation many times).
+  try { URL.revokeObjectURL(workerUrl); } catch (e) {}
 
   // Add error handler for worker errors
   _obfuscateWorker.onerror = function(e) {
     console.error('[Worker Error]', e);
+    _luaWorkerReady = false;
     _luaObfuscatorReady = false;
+    // Reject any pending callback so the UI doesn't hang
     if (_obfuscateCallbacks) {
       _obfuscateCallbacks.reject(new Error('Worker错误: ' + (e.message || '未知错误')));
       _obfuscateCallbacks = null;
     }
+    if (_obfuscateTimer) { clearTimeout(_obfuscateTimer); _obfuscateTimer = null; }
     hideLoading();
+    // Worker is broken — drop the handle so a fresh one is created next time
+    try { _obfuscateWorker.terminate(); } catch (e2) {}
+    _obfuscateWorker = null;
   };
 
   _obfuscateWorker.onmessage = function(e) {
     const msg = e.data;
     if (msg.type === 'ready') {
       console.log('[Worker] Ready');
-      _luaObfuscatorReady = true;
+      _luaWorkerReady = true;
+      _luaObfuscatorReady = _luaMainReady; // fully ready only when both subsystems up
       setStatus('就绪', 'ok');
     } else if (msg.type === 'result') {
       if (_obfuscateCallbacks) {
         _obfuscateCallbacks.resolve(msg.code);
         _obfuscateCallbacks = null;
       }
+      if (_obfuscateTimer) { clearTimeout(_obfuscateTimer); _obfuscateTimer = null; }
       hideLoading();
     } else if (msg.type === 'error') {
       console.error('[Worker] Error:', msg.error);
@@ -540,6 +1554,7 @@ function initObfuscateWorker() {
         _obfuscateCallbacks.reject(new Error(msg.error));
         _obfuscateCallbacks = null;
       }
+      if (_obfuscateTimer) { clearTimeout(_obfuscateTimer); _obfuscateTimer = null; }
       hideLoading();
     }
   };
@@ -558,17 +1573,19 @@ function initObfuscateWorker() {
   }
 }
 
-function showLoading(text) {
+function showLoading(text, sub) {
   const overlay = document.getElementById('loading-overlay');
   const label = document.getElementById('loading-text');
-  if (overlay) { overlay.style.display = 'flex'; }
+  const subEl = document.getElementById('loading-sub');
+  if (overlay) { overlay.classList.add('show'); }
   if (label) { label.textContent = text || '混淆中...'; }
+  if (subEl) { subEl.textContent = sub || '正在处理您的代码'; }
   setStatus('处理中...', 'warn');
 }
 
 function hideLoading() {
   const overlay = document.getElementById('loading-overlay');
-  if (overlay) { overlay.style.display = 'none'; }
+  if (overlay) { overlay.classList.remove('show'); }
   if (_obfuscateTimer) { clearTimeout(_obfuscateTimer); _obfuscateTimer = null; }
 }
 
@@ -590,9 +1607,22 @@ function cancelObfuscate() {
 }
 
 function obfuscateLuaAsync(sourceCode, options) {
+  // If a previous request is still pending, reject it so the UI doesn't hang.
+  // (We don't auto-cancel the worker — that would leak state — we just resolve
+  // the old promise with an error so the caller's .then() chain recovers.)
+  if (_obfuscateCallbacks) {
+    const oldCb = _obfuscateCallbacks;
+    _obfuscateCallbacks = null;
+    if (_obfuscateTimer) { clearTimeout(_obfuscateTimer); _obfuscateTimer = null; }
+    oldCb.reject(new Error('新的混淆请求已发起，上一个被取消'));
+  }
   return new Promise((resolve, reject) => {
+    if (!_obfuscateWorker) {
+      // Try to create one now (e.g. if the user clicks before init finished)
+      try { initObfuscateWorker(); } catch (e) { /* swallow */ }
+    }
     if (!_obfuscateWorker || !_luaObfuscatorReady) {
-      reject(new Error('Worker未就绪'));
+      reject(new Error('Lua引擎尚未就绪，请稍后再试'));
       return;
     }
     _obfuscateCallbacks = { resolve, reject };
@@ -607,7 +1637,6 @@ function obfuscateLuaAsync(sourceCode, options) {
       if (_obfuscateCallbacks) {
         _obfuscateCallbacks.reject(new Error('混淆超时（' + (OBFUSCATE_TIMEOUT_MS/1000) + '秒）。请减少开启的 Pass 或缩小输入后重试'));
         _obfuscateCallbacks = null;
-        cancelObfuscate();
       }
     }, OBFUSCATE_TIMEOUT_MS);
   });
@@ -615,7 +1644,10 @@ function obfuscateLuaAsync(sourceCode, options) {
 
 // Legacy sync fallback (for runLua etc.)
 function obfuscateLua(sourceCode, options) {
-  if (!_luaObfuscatorReady) throw new Error('Lua混淆器未就绪（初始化失败，请查看控制台 [LuaInit] 日志）');
+  // Sync path uses main-thread Lua only. If the worker isn't up yet, the
+  // caller should use obfuscateLuaAsync — but fall back here if explicitly
+  // requested.
+  if (!_luaMainReady) throw new Error('Lua混淆器未就绪（初始化失败，请查看控制台 [LuaInit] 日志）');
   const L = window._luaState;
   const lua = fengari.lua;
   const lauxlib = fengari.lauxlib;
@@ -628,7 +1660,32 @@ function obfuscateLua(sourceCode, options) {
   if (options) {
     lua.lua_newtable(L);
     for (const [key, value] of Object.entries(options)) {
-      lua.lua_pushboolean(L, value);
+      // Preserve type — Lua side needs strings (e.g. vm_mode='advanced')
+      // to be strings, not booleans. Booleans must still become booleans,
+      // not strings. JS bridge pushes whatever the JS value actually is.
+      if (typeof value === 'boolean') {
+        lua.lua_pushboolean(L, value);
+      } else if (typeof value === 'number') {
+        lua.lua_pushnumber(L, value);
+      } else if (typeof value === 'string') {
+        lua.lua_pushstring(L, fengari.to_luastring(value));
+      } else if (value === null || value === undefined) {
+        lua.lua_pushnil(L);
+      } else if (Array.isArray(value)) {
+        lua.lua_newtable(L);
+        value.forEach((item, i) => {
+          if (typeof item === 'string') {
+            lua.lua_pushstring(L, fengari.to_luastring(item));
+          } else if (typeof item === 'number') {
+            lua.lua_pushnumber(L, item);
+          } else {
+            lua.lua_pushboolean(L, !!item);
+          }
+          lua.lua_rawseti(L, -2, i + 1);
+        });
+      } else {
+        lua.lua_pushnil(L);
+      }
       lua.lua_setfield(L, -2, fengari.to_luastring(key));
     }
   } else {
@@ -643,6 +1700,82 @@ function obfuscateLua(sourceCode, options) {
   const result = lua.lua_tojsstring(L, -1);
   lua.lua_settop(L, 0);
   return result;
+}
+
+// Run Lua source in fengari and capture print output. Returns true on success.
+function runLua(sourceCode, label) {
+  label = label || '运行';
+  // runLua uses main-thread Lua only (creates its own state); doesn't need the worker.
+  if (!_luaMainReady) {
+    appendOutput('Lua引擎未就绪\n', 'error');
+    return false;
+  }
+  if (typeof fengari === 'undefined' || !fengari.lua) {
+    appendOutput('fengari 未加载\n', 'error');
+    return false;
+  }
+  const lua = fengari.lua;
+  const lauxlib = fengari.lauxlib;
+  const lualib = fengari.lualib;
+  let runState;
+  try {
+    runState = lauxlib.luaL_newstate();
+    lualib.luaL_openlibs(runState);
+  } catch (e) {
+    appendOutput(label + ' 启动失败: ' + e.message + '\n', 'error');
+    return false;
+  }
+  appendOutput('━━━ ' + label + ' ━━━\n', 'info');
+  // Override print/io.write to capture output
+  const collectPrint = (L) => {
+    const n = lua.lua_gettop(L);
+    let out = '';
+    for (let i = 1; i <= n; i++) {
+      const t = lua.lua_type(L, i);
+      if (t === lua.LUA_TSTRING) out += fengari.to_jsstring(lua.lua_tostring(L, i));
+      else if (t === lua.LUA_TNUMBER) out += String(lua.lua_tonumber(L, i));
+      else if (t === lua.LUA_TBOOLEAN) out += lua.lua_toboolean(L, i) ? 'true' : 'false';
+      else if (t === lua.LUA_TNIL) out += 'nil';
+      else out += lua.lua_typename(L, t);
+      if (i < n) out += '\t';
+    }
+    appendOutput(out + '\n', '');
+    return 0;
+  };
+  const collectWrite = (L) => {
+    const s = fengari.to_jsstring(lua.lua_tostring(L, 1));
+    appendOutput(s, '');
+    return 0;
+  };
+  try {
+    lua.lua_pushcfunction(runState, collectPrint);
+    lua.lua_setglobal(runState, fengari.to_luastring('print'));
+    lua.lua_pushcfunction(runState, collectWrite);
+    lua.lua_setglobal(runState, fengari.to_luastring('io.write'));
+    // Load + run
+    const status = lauxlib.luaL_loadbuffer(runState, fengari.to_luastring(sourceCode), sourceCode.length, fengari.to_luastring('=' + label));
+    if (status !== lua.LUA_OK) {
+      const err = lua.lua_tojsstring(runState, -1);
+      lua.lua_settop(runState, 0);
+      appendOutput('加载失败: ' + err + '\n', 'error');
+      lua.lua_close(runState);
+      return false;
+    }
+    const rc = lua.lua_pcall(runState, 0, 0, 0);
+    if (rc !== lua.LUA_OK) {
+      const err = lua.lua_tojsstring(runState, -1);
+      lua.lua_settop(runState, 0);
+      appendOutput('运行错误: ' + err + '\n', 'error');
+      lua.lua_close(runState);
+      return false;
+    }
+    lua.lua_close(runState);
+    return true;
+  } catch (e) {
+    appendOutput('运行异常: ' + e.message + '\n', 'error');
+    try { lua.lua_close(runState); } catch (_) {}
+    return false;
+  }
 }
 
 // Legacy wrapper for VM-only mode
@@ -3038,8 +4171,12 @@ function PassManager:run(code, opts)
   -- 构建共享上下文
   local ctx = {
     vm_module = vm_module,
+    vm_module_advanced = opts.vm_module_advanced,
     config = {},
   }
+
+  -- vm_mode 通过 sync_config_to_passes() 的 set_pass_config 路径传递，
+  -- 不再在 run() 内做特殊处理（删除重复的 vm_mode 转发）。
 
   -- 检查依赖
   for _, entry in ipairs(self._pipeline) do
@@ -3169,10 +4306,10 @@ local M = {}
 -- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
 -- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
 local BUILTIN = {
+  "passes.string_pool",   -- order=0: string extract envelope (name "string_extract")
   "passes.vm_function",
   "passes.vm_protect",
   "passes.anti_debug",
-  "passes.string_encrypt",
   "passes.num_encrypt",
   "passes.instr_sub",
   "passes.var_mangle",
@@ -3182,7 +4319,69 @@ local BUILTIN = {
   "passes.bb_split",
  "passes.junk_comment",
   "passes.call_indirect",
+  "passes.api_indirect",
   "passes.header",
+  "passes.string_restore",
+}
+
+-- 加载所有内置 Pass 并注册到 PassManager
+function M.load_all(pm)
+  for _, name in ipairs(BUILTIN) do
+    local ok, pass = pcall(require, name)
+    if ok and type(pass) == "table" and pass.name then
+      pm:register(pass)
+    else
+      if io and io.stderr then io.stderr:write(string.format("[passes] WARNING: 加载 %s 失败: %s\\n", name, tostring(pass))) else print(string.format("[passes] WARNING: 加载 %s 失败: %s", name, tostring(pass))) end
+    end
+  end
+  return pm
+end
+
+-- 注册单个自定义 Pass
+function M.register(pm, pass)
+  pm:register(pass)
+end
+
+return M
+]], "@passes/init.lua")()
+  end
+  package.preload["passes.init"] = function()
+    return load([[-- ================================================================
+-- passes/init.lua
+-- Pass 加载器
+--
+-- Author: Rainy_qwq
+-- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
+-- License: MIT
+-- ================================================================
+-- 扫描 passes/ 目录，加载所有 Pass 模块并注册到 PassManager
+--
+-- 用法：
+--   local PassManager = require("pass_manager")
+--   local pm = PassManager.new()
+--   require("passes").load_all(pm)
+
+local M = {}
+
+-- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
+-- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
+local BUILTIN = {
+  "passes.string_pool",   -- order=0: string extract envelope (name "string_extract")
+  "passes.vm_function",
+  "passes.vm_protect",
+  "passes.anti_debug",
+  "passes.num_encrypt",
+  "passes.instr_sub",
+  "passes.var_mangle",
+  "passes.adv_fake_cf",
+ "passes.cf_flatten",
+ "passes.bcf",
+  "passes.bb_split",
+ "passes.junk_comment",
+  "passes.call_indirect",
+  "passes.api_indirect",
+  "passes.header",
+  "passes.string_restore",
 }
 
 -- 加载所有内置 Pass 并注册到 PassManager
@@ -3362,6 +4561,11 @@ local M = {}
 M.pool = {}
 M._seq = 0
 M.whitelist = {} -- exact string values that must remain plaintext
+
+M.name = "string_extract"
+M.title = "字符串提取"
+M.version = "1.0.0"
+M.order = 0
 
 local function normalize_whitelist(wl)
   local out = {}
@@ -3700,6 +4904,33 @@ local function build_decode_expr(enc, style)
   end
 end
 
+-- Hex encoding style: outputs \\xNN hex-escaped string
+local function build_decode_hex_expr(enc)
+  local key = and_u32(enc.key, 255)
+  local cstr = slices_to_lua(enc.slices)
+  -- Reconstruct ordered bytes, then build hex-escaped string
+  return table.concat({
+    "(function()",
+    "local k=", tostring(key), ";local c=", cstr, ";",
+    "table.sort(c,function(a,b)return(a.p or 0)<(b.p or 0)end);",
+    "local f={}; for _,s in ipairs(c) do for i=1,#s do f[#f+1]=s[i]%256 end end;",
+    "local t,kk={},k;",
+    "for i=1,#f do",
+    " local x,y=f[i],kk%256; local r,p,xx,yy=0,1,x,y;",
+    " for _=1,8 do local xi=xx%2;local yi=yy%2;if xi~=yi then r=r+p end;xx=(xx-xi)/2;yy=(yy-yi)/2;p=p*2 end;",
+    " t[i]=string.char(r); kk=(kk+1+(i%7))%256; if kk==0 then kk=1 end;",
+    "end;",
+    "local s=table.concat(t);",
+    "local hex={'\\\\\\\\x';};",
+    "for i=1,#s do",
+    " local b=s:byte(i);",
+    " hex[#hex+1]=string.format('\\\\\\\\x%02x',b);",
+    "end;",
+    "return table.concat(hex)",
+    "end)()",
+  })
+end
+
 ------------------------------------------------------------
 -- Extract string literals
 ------------------------------------------------------------
@@ -3888,6 +5119,12 @@ function M.restore_raw(code)
   return code
 end
 
+function M.apply(code, ctx)
+  -- 当 VM 保护启用时跳过字符串提取（VM 自己处理字符串）
+  if ctx and ctx.config and ctx.config.vm_active then return code end
+  return M.extract(code)
+end
+
 return M
 ]==], "@passes/string_pool.lua")()
   end
@@ -3916,7 +5153,7 @@ if _VERSION then
   end
 end
 
-local VERSION = "3.1.0"
+local VERSION = "3.3.0"
 
 ------------------------------------------------------------
 -- 自定义指令集定义
@@ -5732,6 +6969,7 @@ local function generate_vm_source(proto, key)
   -- Template uses %% for literal % in string.format
   -- 注意：生成代码不含标记和 do...end 包裹，由调用方（vm_protect / vm_function Pass）统一处理
   local tpl = [====[
+  local S = _G or _ENV or getfenv(0)
   local _d = {%s}
   local _chars = {%s}
   local _k = %d
@@ -5745,9 +6983,9 @@ local function generate_vm_source(proto, key)
     local t = {}
     for i = 1, len do
       local idx = _d[di]; di = di + 1
-      t[i] = string.char((_chars[idx] or 0) ~ _ck)
+      t[i] = S["\\x73\\x74\\x72\\x69\\x6e\\x67"]["\\x63\\x68\\x61\\x72"]((_chars[idx] or 0) ~ _ck)
     end
-    return table.concat(t), di
+    return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x63\\x6f\\x6e\\x63\\x61\\x74"](t), di
   end
 
 %s
@@ -5844,14 +7082,14 @@ local function generate_vm_source(proto, key)
     H[OP_GETTABLE] = function()
       local t = regs[base + B]
       local k = regs[base + C]
-      if type(t) == "table" then
+      if S["\\x74\\x79\\x70\\x65"](t) == "\\x74\\x61\\x62\\x6c\\x65" then
         regs[base + A] = t[k]
-      elseif type(t) == "string" and type(k) == "string" then
-        regs[base + A] = string[k]
-      elseif getmetatable(t) then
-        local mt = getmetatable(t)
+      elseif S["\\x74\\x79\\x70\\x65"](t) == "\\x73\\x74\\x72\\x69\\x6e\\x67" and S["\\x74\\x79\\x70\\x65"](k) == "\\x73\\x74\\x72\\x69\\x6e\\x67" then
+        regs[base + A] = S["\\x73\\x74\\x72\\x69\\x6e\\x67"][k]
+      elseif S["\\x67\\x65\\x74\\x6d\\x65\\x74\\x61\\x74\\x61\\x62\\x6c\\x65"](t) then
+        local mt = S["\\x67\\x65\\x74\\x6d\\x65\\x74\\x61\\x74\\x61\\x62\\x6c\\x65"](t)
         if mt.__index then
-          if type(mt.__index) == "function" then
+          if S["\\x74\\x79\\x70\\x65"](mt.__index) == "\\x66\\x75\\x6e\\x63\\x74\\x69\\x6f\\x6e" then
             regs[base + A] = mt.__index(t, k)
           else
             regs[base + A] = mt.__index[k]
@@ -5865,14 +7103,14 @@ local function generate_vm_source(proto, key)
     end
     H[OP_SETTABLE] = function()
       local t = regs[base + A]
-      if type(t) == "table" then t[regs[base + B]] = regs[base + C] end
+      if S["\\x74\\x79\\x70\\x65"](t) == "\\x74\\x61\\x62\\x6c\\x65" then t[regs[base + B]] = regs[base + C] end
     end
     H[OP_NEWTABLE] = function()
       regs[base + A] = {}
     end
     H[OP_ADD] = function()
       local l, r = regs[base + B], regs[base + C]
-      regs[base + A] = (type(l) == "number" and type(r) == "number") and (l + r) or (tonumber(l) or 0) + (tonumber(r) or 0)
+      regs[base + A] = (S["\\x74\\x79\\x70\\x65"](l) == "\\x6e\\x75\\x6d\\x62\\x65\\x72" and S["\\x74\\x79\\x70\\x65"](r) == "\\x6e\\x75\\x6d\\x62\\x65\\x72") and (l + r) or (S["\\x74\\x6f\\x6e\\x75\\x6d\\x62\\x65\\x72"](l) or 0) + (S["\\x74\\x6f\\x6e\\x75\\x6d\\x62\\x65\\x72"](r) or 0)
     end
     H[OP_SUB] = function()
       regs[base + A] = regs[base + B] - regs[base + C]
@@ -5921,10 +7159,10 @@ local function generate_vm_source(proto, key)
     end
     H[OP_CONCAT] = function()
       local v = regs[base + B]
-      local s = type(v) == 'string' and v or tostring(v)
+      local s = S["\\x74\\x79\\x70\\x65"](v) == '\\x73\\x74\\x72\\x69\\x6e\\x67' and v or S["\\x74\\x6f\\x73\\x74\\x72\\x69\\x6e\\x67"](v)
       for j = B + 1, C do
         v = regs[base + j]
-        s = s .. (type(v) == 'string' and v or tostring(v))
+        s = s .. (S["\\x74\\x79\\x70\\x65"](v) == '\\x73\\x74\\x72\\x69\\x6e\\x67' and v or S["\\x74\\x6f\\x73\\x74\\x72\\x69\\x6e\\x67"](v))
       end
       regs[base + A] = s
     end
@@ -5974,7 +7212,7 @@ local function generate_vm_source(proto, key)
     end
     H[OP_TFORCALL] = function()
       local fn = regs[base + A]
-      if type(fn) == "function" then
+      if S["\\x74\\x79\\x70\\x65"](fn) == "\\x66\\x75\\x6e\\x63\\x74\\x69\\x6f\\x6e" then
         local results = {fn(regs[base + A + 1], regs[base + A + 2])}
         for j = 1, C do
           regs[base + A + 2 + j] = results[j]
@@ -6002,7 +7240,7 @@ local function generate_vm_source(proto, key)
     end
     H[OP_CALL] = function()
       local fn = regs[base + A]
-      if type(fn) == "function" then
+      if S["\\x74\\x79\\x70\\x65"](fn) == "\\x66\\x75\\x6e\\x63\\x74\\x69\\x6f\\x6e" then
         local nargs = B - 1
         local results
         if nargs <= 0 then
@@ -6016,7 +7254,7 @@ local function generate_vm_source(proto, key)
         else
           local args = {}
           for j = 1, nargs do args[j] = regs[base + A + j] end
-          results = {fn(table.unpack(args))}
+          results = {fn(S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](args))}
         end
         if C > 0 then
           for j = 1, C - 1 do
@@ -6029,7 +7267,7 @@ local function generate_vm_source(proto, key)
     end
     H[OP_TAILCALL] = function()
       local fn = regs[base + A]
-      if type(fn) == "function" then
+      if S["\\x74\\x79\\x70\\x65"](fn) == "\\x66\\x75\\x6e\\x63\\x74\\x69\\x6f\\x6e" then
         local nargs = B - 1
         if nargs <= 0 then return "RET", {fn()}
         elseif nargs == 1 then return "RET", {fn(regs[base + A + 1])}
@@ -6038,7 +7276,7 @@ local function generate_vm_source(proto, key)
         else
           local args = {}
           for j = 1, nargs do args[j] = regs[base + A + j] end
-          return "RET", {fn(table.unpack(args))}
+          return "RET", {fn(S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](args))}
         end
       end
     end
@@ -6055,7 +7293,7 @@ local function generate_vm_source(proto, key)
     end
     H[OP_CLOSURE] = function()
       local sub_proto = consts[B]
-      if type(sub_proto) == "table" and sub_proto.code then
+      if S["\\x74\\x79\\x70\\x65"](sub_proto) == "\\x74\\x61\\x62\\x6c\\x65" and sub_proto.code then
         local captured_upvals = {}
         if sub_proto.upvalues then
           for ui, uv_desc in ipairs(sub_proto.upvalues) do
@@ -6065,7 +7303,7 @@ local function generate_vm_source(proto, key)
         regs[base + A] = function(...)
           local sub_regs = {}
           local args = {...}
-          local n = select("#", ...)
+          local n = S["\\x73\\x65\\x6c\\x65\\x63\\x74"]("#", ...)
           for ai = 1, sub_proto.numparams do
             sub_regs[ai - 1] = args[ai]
           end
@@ -6092,7 +7330,7 @@ local function generate_vm_source(proto, key)
     end
     H[OP_SETLIST] = function()
       local t = regs[base + A]
-      if type(t) == "table" then
+      if S["\\x74\\x79\\x70\\x65"](t) == "\\x74\\x61\\x62\\x6c\\x65" then
         for j = 1, C do
           t[B + j - 1] = regs[base + A + j]
         end
@@ -6106,7 +7344,7 @@ local function generate_vm_source(proto, key)
     while pc <= #code do
       _steps = _steps + 1
       if _steps > _max_steps then
-        error("VM step limit exceeded (possible infinite loop)")
+        S["\\x65\\x72\\x72\\x6f\\x72"]("VM step limit exceeded (possible infinite loop)")
       end
       local ins = code[pc]
       local op = ins.op
@@ -6116,7 +7354,7 @@ local function generate_vm_source(proto, key)
       if h then
         local tag, pack = h()
         if tag == "RET" then
-          return table.unpack(pack or {})
+          return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](pack or {})
         end
       end
     end
@@ -6127,13 +7365,14 @@ local function generate_vm_source(proto, key)
     _cs = (_cs + _d[_i] * (_i + _cs_seed)) & 0xFFFF
   end
   if _cs ~= _cs_expect then
-    error('integrity check failed')
+    S["\\x65\\x72\\x72\\x6f\\x72"]('integrity check failed')
   end
 
   local main_proto = decode_proto(1)
   local regs = {}
-  exec_proto(main_proto, regs, 0, 0, nil)
+  local _retvals = {exec_proto(main_proto, regs, 0, 0, nil)}
   _G._pack = _orig_pack
+  return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](_retvals)
 ]====]
 
   return string.format(tpl, data_str, chars_str, key, pool_key, seed, cs, op_locals_str)
@@ -6183,6 +7422,13 @@ end
 M._Parser = Parser
 M._Compiler = Compiler
 M._OPC = OPC
+M._OPC_NAMES = OPC_NAMES
+M._build_op_map = build_op_map
+M._build_char_pool = build_char_pool
+M._encode_proto = encode_proto
+M._shuffle_list = shuffle_list
+M._generate_vm_source = generate_vm_source
+M._generate_function_vm = generate_function_vm
 
 ------------------------------------------------------------
 -- 函数级VM：生成可调用的VM chunk（返回 function）
@@ -6219,6 +7465,7 @@ local function generate_function_vm(proto, key)
   -- 内层 do...end 定义 VM 逻辑，return function(...) 返回最终可调用函数
   local tpl = [=====[
 (function() do
+  local S = _G or _ENV or getfenv(0)
   local _d = {%s}
   local _chars = {%s}
   local _k = %d
@@ -6232,9 +7479,9 @@ local function generate_function_vm(proto, key)
     local t = {}
     for i = 1, len do
       local idx = _d[di]; di = di + 1
-      t[i] = string.char((_chars[idx] or 0) ~ _ck)
+      t[i] = S["\\x73\\x74\\x72\\x69\\x6e\\x67"]["\\x63\\x68\\x61\\x72"]((_chars[idx] or 0) ~ _ck)
     end
-    return table.concat(t), di
+    return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x63\\x6f\\x6e\\x63\\x61\\x74"](t), di
   end
 
 %s
@@ -6528,7 +7775,7 @@ local function generate_function_vm(proto, key)
     while pc <= #code do
       _steps = _steps + 1
       if _steps > _max_steps then
-        error("VM step limit exceeded (possible infinite loop)")
+        S["\\x65\\x72\\x72\\x6f\\x72"]("VM step limit exceeded (possible infinite loop)")
       end
       local ins = code[pc]
       local op = ins.op
@@ -6538,7 +7785,7 @@ local function generate_function_vm(proto, key)
       if h then
         local tag, pack = h()
         if tag == "RET" then
-          return table.unpack(pack or {})
+          return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](pack or {})
         end
       end
     end
@@ -6560,7 +7807,7 @@ local function generate_function_vm(proto, key)
 
   return function(...)
     local _args = {...}
-    local _nargs = select("#", ...)
+    local _nargs = S["\\x73\\x65\\x6c\\x65\\x63\\x74"]("#", ...)
     local _regs = {}
     local _vargs = {}
     for _ai = 1, _np do
@@ -6801,6 +8048,453 @@ end
 return M
 ]=], "@passes/vm.lua")()
   end
+  package.preload["passes.vm_advanced"] = function()
+    return load([=[-- ================================================================
+-- passes/vm_advanced.lua
+-- 高级 VM 模式 — 完美还原样本 U表状态机 + 4模式动态索引
+-- 完整重写 v3：解决 CLOSURE/FORLOOP/PC 管理，支持子 proto 编译
+-- ================================================================
+
+local utils = require("passes.utils")
+local random_int = utils.random_int
+local vm = require("passes.vm")
+local Parser = vm._Parser
+local Compiler = vm._Compiler
+local OPC = vm._OPC
+local OPC_NAMES = vm._OPC_NAMES
+local build_op_map = vm._build_op_map
+local build_char_pool = vm._build_char_pool
+local encode_proto = vm._encode_proto
+
+local M = { name = "vm_advanced", title = "高级VM(样本模式)", version = "3.1.0" }
+
+math.randomseed(math.floor(os.time() + os.clock() * 10000))
+
+-- hex 转义
+local function hex_escape(s)
+  local r = {}
+  for i = 1, #s do
+    r[#r + 1] = string.format("\\\\x%02x", string.byte(s, i))
+  end
+  return table.concat(r)
+end
+
+-- 折叠整数（纯常量，无 U[68]）
+local function fold_literal(n)
+  if n == 0 then return "(0x0|0)" end
+  if n == 1 then return "(0x1|0)" end
+  if n == -1 then return "(~0x0)" end
+  local abs_n = math.abs(n); local sign = n < 0 and "-" or ""
+  local a = math.random(1, 0xFFFF); local xored = a ~ abs_n
+  return sign .. "(" .. tostring(a) .. "~" .. tostring(xored) .. ")"
+end
+
+-- 4 模式表达式生成器（含 U[68] 引用）
+local function gen_expr(target, u68)
+  u68 = u68 or 0
+  for attempt = 1, 50 do
+    local method = math.random(1, 4); local expr
+    if method == 1 then
+      local a = math.random(-99, 99); if a == 0 then a = 1 end
+      local b = math.random(-9999, 9999)
+      local c = target - a * b
+      expr = "((" .. a .. ")*(" .. b .. ")+(" .. c .. "))"
+    elseif method == 2 then
+      local a = math.random(-9999, 9999); local b = math.random(-9999, 9999)
+      local c = target - (a - b)
+      expr = "((" .. a .. "+U[68])-(" .. b .. "+U[68])+(" .. c .. "))"
+    elseif method == 3 then
+      local b = math.random(2, 9999); local a = math.random(1, b * 2)
+      local c = target - (a + u68) % b
+      expr = "((" .. a .. "+U[68])%(" .. b .. ")+(" .. c .. "))"
+    else
+      local a = math.random(-99, 99); local b = math.random(-99, 99)
+      local c = target - (a + u68) * (b + u68)
+      expr = "((" .. a .. "+U[68])*(" .. b .. "+U[68])+(" .. c .. "))"
+    end
+    local f = load("local U={} U[68]=" .. u68 .. " return " .. expr)
+    if f then local ok, v = pcall(f); if ok and v == target then return expr end end
+  end
+  return fold_literal(target)
+end
+
+-- 寄存器索引表达式
+local function reg_idx(r, u68) return "((" .. gen_expr(r, u68) .. "))" end
+
+-- 死寄存器索引（超范围）
+local function dead_idx(u68)
+  return gen_expr(math.random(2000, 100000), u68)
+end
+
+-- 常量表达式
+local function const_expr(v)
+  local t = type(v)
+  if t == "number" then
+    return v == math.floor(v) and fold_literal(v) or tostring(v)
+  elseif t == "string" then
+    return '"' .. v:gsub("\\\\", "\\\\\\\\"):gsub('"', '\\\\"'):gsub("\\n", "\\\\n"):gsub("\\t", "\\\\t") .. '"'
+  elseif t == "boolean" then return v and "true" or "false"
+  else return "nil" end
+end
+
+-- 字符串解码 IIFE
+local function build_string_expr(s, char_pool_enc, byte_to_idx, pool_key)
+  local enc = {}
+  for i = 1, #s do
+    local b = string.byte(s, i); local idx = byte_to_idx[b] or 1
+    enc[#enc + 1] = tostring((char_pool_enc[idx] or 0) ~ pool_key)
+  end
+  return "(function()local _c={" .. table.concat(enc, ",") .. "}local _t={}for _i=1,#_c do _t[_i]=a(_c[_i])end return e(_t)end)()"
+end
+
+-- 生成死代码填充
+local function gen_dead_code(u68, count)
+  local lines = {}
+  count = count or math.random(5, 15)
+  for d = 1, count do
+    lines[#lines + 1] = "U[37][" .. dead_idx(u68) .. "]=U[37][" .. dead_idx(u68) .. "];"
+  end
+  return table.concat(lines)
+end
+
+-- 编译 proto 到 handler 字符串
+-- 返回 { handler_str, return_flags_str }
+local function compile_proto(proto, op_map, name_to_rt, char_pool_enc, byte_to_idx, pool_key, u68)
+  local handler_parts = {}
+  local return_flags = {}
+  local max_reg = 0
+
+  for i, ins in ipairs(proto.code) do
+    local op_name = "NOP"
+    for _, entry in ipairs(OPC_NAMES) do
+      if entry[2] == ins.op then op_name = entry[1]; break end
+    end
+
+    local A, B, C = ins.a, ins.b, ins.c
+    max_reg = math.max(max_reg, A + 1, B + 1, C + 1)
+    local body = {}; local function emit(s) body[#body + 1] = s end
+
+    -- 非终止指令填充死代码
+    local is_terminal = (op_name == "RETURN" or op_name == "TAILCALL")
+    if not is_terminal then
+      emit(gen_dead_code(u68, math.random(5, 15)))
+    end
+
+    if op_name == "NOP" then
+      emit("local _n=U[37][" .. dead_idx(u68) .. "];")
+
+    elseif op_name == "LOADK" then
+      local k = proto.constants[B]
+      if type(k) == "number" then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=" .. const_expr(k) .. ";")
+      elseif type(k) == "string" then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=" .. build_string_expr(k, char_pool_enc, byte_to_idx, pool_key) .. ";")
+      elseif type(k) == "boolean" then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=" .. tostring(k) .. ";")
+      else
+        emit("U[37][" .. reg_idx(A, u68) .. "]=nil;")
+      end
+
+    elseif op_name == "LOADBOOL" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=" .. (B ~= 0 and "true" or "false") .. ";")
+      if C ~= 0 then emit("U[82]=U[82]+" .. gen_expr(1, u68) .. ";") end
+
+    elseif op_name == "LOADNIL" then
+      emit("for _i=0," .. gen_expr(B, u68) .. " do U[37][" .. reg_idx(A, u68) .. "+_i]=nil end;")
+
+    elseif op_name == "MOVE" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "];")
+
+    elseif op_name == "GETGLOBAL" then
+      local k = proto.constants[B]
+      if type(k) == "string" then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=S[" .. build_string_expr(k, char_pool_enc, byte_to_idx, pool_key) .. "];")
+      else
+        emit("U[37][" .. reg_idx(A, u68) .. "]=S[" .. const_expr(k) .. "];")
+      end
+
+    elseif op_name == "SETGLOBAL" then
+      local k = proto.constants[B]
+      if type(k) == "string" then
+        emit("S[" .. build_string_expr(k, char_pool_enc, byte_to_idx, pool_key) .. "]=U[37][" .. reg_idx(A, u68) .. "];")
+      else
+        emit("S[" .. const_expr(k) .. "]=U[37][" .. reg_idx(A, u68) .. "];")
+      end
+
+    elseif op_name == "GETTABLE" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "][U[37][" .. reg_idx(C, u68) .. "]];")
+
+    elseif op_name == "SETTABLE" then
+      emit("U[37][" .. reg_idx(A, u68) .. "][U[37][" .. reg_idx(B, u68) .. "]]=U[37][" .. reg_idx(C, u68) .. "];")
+
+    elseif op_name == "NEWTABLE" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]={};")
+
+    elseif op_name == "ADD" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]+U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "SUB" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]-U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "MUL" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]*U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "DIV" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]/U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "IDIV" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]//U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "MOD" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]%U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "POW" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]^U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "BAND" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]&U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "BOR" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]|U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "BXOR" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]~U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "SHL" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]<<U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "SHR" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "]>>U[37][" .. reg_idx(C, u68) .. "];")
+    elseif op_name == "UNM" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=-U[37][" .. reg_idx(B, u68) .. "];")
+    elseif op_name == "BNOT" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=~U[37][" .. reg_idx(B, u68) .. "];")
+    elseif op_name == "NOT" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=not U[37][" .. reg_idx(B, u68) .. "];")
+    elseif op_name == "LEN" then
+      emit("U[37][" .. reg_idx(A, u68) .. "]=#U[37][" .. reg_idx(B, u68) .. "];")
+
+    elseif op_name == "CONCAT" then
+      emit("local _s=U[37][" .. reg_idx(B, u68) .. "];")
+      emit("for _j=" .. gen_expr(B + 1, u68) .. "," .. gen_expr(C, u68) .. " do _s=_s..U[37][" .. reg_idx(0, u68) .. "+_j] end;")
+      emit("U[37][" .. reg_idx(A, u68) .. "]=_s;")
+
+    elseif op_name == "EQ" then
+      emit("if(U[37][" .. reg_idx(B, u68) .. "]==U[37][" .. reg_idx(C, u68) .. "])~=(" .. gen_expr(A, u68) .. "~=0)then U[82]=U[82]+" .. gen_expr(1, u68) .. " end;")
+    elseif op_name == "LT" then
+      emit("if(U[37][" .. reg_idx(B, u68) .. "]<U[37][" .. reg_idx(C, u68) .. "])~=(" .. gen_expr(A, u68) .. "~=0)then U[82]=U[82]+" .. gen_expr(1, u68) .. " end;")
+    elseif op_name == "LE" then
+      emit("if(U[37][" .. reg_idx(B, u68) .. "]<=U[37][" .. reg_idx(C, u68) .. "])~=(" .. gen_expr(A, u68) .. "~=0)then U[82]=U[82]+" .. gen_expr(1, u68) .. " end;")
+    elseif op_name == "TEST" then
+      emit("if U[37][" .. reg_idx(A, u68) .. "] then U[82]=U[82]+" .. gen_expr(1, u68) .. " end;")
+    elseif op_name == "TESTSET" then
+      emit("if U[37][" .. reg_idx(B, u68) .. "] then U[82]=U[82]+" .. gen_expr(1, u68) .. " else U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(B, u68) .. "] end;")
+
+    elseif op_name == "JMP" then
+      local sBx = B; if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      emit("U[82]=U[82]+" .. gen_expr(sBx, u68) .. ";")
+
+    elseif op_name == "FORPREP" then
+      local sBx = B; if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "]-U[37][" .. reg_idx(A + 2, u68) .. "];")
+      emit("U[82]=U[82]+" .. gen_expr(sBx, u68) .. ";")
+
+    elseif op_name == "FORLOOP" then
+      local sBx = B; if sBx > 0x7FFFFFFF then sBx = sBx - 0x100000000 end
+      emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "]+U[37][" .. reg_idx(A + 2, u68) .. "];")
+      emit("local _step=U[37][" .. reg_idx(A + 2, u68) .. "];")
+      emit("local _limit=U[37][" .. reg_idx(A + 1, u68) .. "];")
+      emit("local _idx=U[37][" .. reg_idx(A, u68) .. "];")
+      emit("local _cont=((_step>0 and _idx<=_limit) or (_step<=0 and _idx>=_limit));")
+      emit("if _cont then U[37][" .. reg_idx(A + 3, u68) .. "]=_idx;U[82]=U[82]+" .. gen_expr(sBx, u68) .. " end;")
+
+    elseif op_name == "CALL" then
+      local nargs = B - 1
+      if nargs <= 0 then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "]();")
+      elseif nargs == 1 then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "](U[37][" .. reg_idx(A + 1, u68) .. "]);")
+      elseif nargs == 2 then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "](U[37][" .. reg_idx(A + 1, u68) .. "],U[37][" .. reg_idx(A + 2, u68) .. "]);")
+      elseif nargs == 3 then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "](U[37][" .. reg_idx(A + 1, u68) .. "],U[37][" .. reg_idx(A + 2, u68) .. "],U[37][" .. reg_idx(A + 3, u68) .. "]);")
+      else
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "](M(U[37]," .. gen_expr(A + 1, u68) .. "," .. gen_expr(A + nargs, u68) .. "));")
+      end
+
+    elseif op_name == "TAILCALL" then
+      local nargs = B - 1
+      if nargs <= 0 then emit("return U[37][" .. reg_idx(A, u68) .. "]();")
+      elseif nargs == 1 then emit("return U[37][" .. reg_idx(A, u68) .. "](U[37][" .. reg_idx(A + 1, u68) .. "]);")
+      elseif nargs == 2 then emit("return U[37][" .. reg_idx(A, u68) .. "](U[37][" .. reg_idx(A + 1, u68) .. "],U[37][" .. reg_idx(A + 2, u68) .. "]);")
+      elseif nargs == 3 then emit("return U[37][" .. reg_idx(A, u68) .. "](U[37][" .. reg_idx(A + 1, u68) .. "],U[37][" .. reg_idx(A + 2, u68) .. "],U[37][" .. reg_idx(A + 3, u68) .. "]);")
+      else emit("return U[37][" .. reg_idx(A, u68) .. "](M(U[37]," .. gen_expr(A + 1, u68) .. "," .. gen_expr(A + nargs, u68) .. "));") end
+
+    elseif op_name == "RETURN" then
+      if B >= 2 then
+        local n = B - 1
+        if n == 1 then emit("return U[37][" .. reg_idx(A, u68) .. "];")
+        else emit("return M(U[37]," .. gen_expr(A + 1, u68) .. "," .. gen_expr(A + n, u68) .. ");") end
+      elseif B == 1 then
+        emit("return U[37][" .. reg_idx(A, u68) .. "];")
+      else emit("return;") end
+
+    elseif op_name == "GETUPVAL" then
+      if proto.upvalues and proto.upvalues[B + 1] then
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[28][" .. gen_expr(B + 1, u68) .. "];")
+      else
+        emit("U[37][" .. reg_idx(A, u68) .. "]=U[28][" .. gen_expr(B + 1, u68) .. "];")
+      end
+    elseif op_name == "SETUPVAL" then
+      emit("U[28][" .. gen_expr(B + 1, u68) .. "]=U[37][" .. reg_idx(A, u68) .. "];")
+
+    elseif op_name == "CLOSURE" then
+      local sub_proto = proto.constants[B]
+      if sub_proto and sub_proto.code then
+        local sub_handlers_str, sub_retflags_str = compile_proto(sub_proto, op_map, name_to_rt, char_pool_enc, byte_to_idx, pool_key, u68)
+        local sub_np = sub_proto.numparams or 0
+        local sub_ms = sub_proto.maxstack or 1
+        local sub_n = gen_expr(sub_np, u68)
+        local sub_m = gen_expr(sub_ms, u68)
+        -- 捕获 upvalues：保存当前寄存器值，让子 VM 能访问父作用域变量
+        local uv_capture = {}
+        local uvs = sub_proto.upvalues or {}
+        for ui, uv_desc in ipairs(uvs) do
+          local reg = uv_desc.reg
+          uv_capture[#uv_capture + 1] = "local _uv" .. ui .. "=U[37][" .. reg_idx(reg, u68) .. "];"
+        end
+        local uv_table = "{}"
+        if #uvs > 0 then
+          local uv_parts = {}
+          for ui in ipairs(uvs) do
+            uv_parts[#uv_parts + 1] = "[" .. tostring(ui) .. "]=_uv" .. ui
+          end
+          uv_table = "{" .. table.concat(uv_parts, ",") .. "}"
+        end
+        emit(table.concat(uv_capture))
+        emit("U[37][" .. reg_idx(A, u68) .. "]=function(...) return l({[32]=" .. sub_n .. ",[4]=" .. sub_m .. ",[66]=" .. sub_handlers_str .. ",[80]=" .. sub_retflags_str .. ",[68]=" .. gen_expr(u68, u68) .. ",[22]={}},i(...)," .. uv_table .. ",U[2]) end;")
+      else
+        emit("U[37][" .. reg_idx(A, u68) .. "]=function() end;")
+      end
+
+    elseif op_name == "VARARG" then
+      emit("local _v=U[28][1];if _v then for _j=1,#_v do U[37][" .. reg_idx(A, u68) .. "+_j-1]=_v[_j] end end;")
+
+    elseif op_name == "SETLIST" then
+      emit("for _j=1," .. gen_expr(C, u68) .. " do U[37][" .. reg_idx(A, u68) .. "][" .. gen_expr(B, u68) .. "+_j-1]=U[37][" .. reg_idx(A, u68) .. "+_j] end;")
+
+    elseif op_name == "EXTRARG" then
+      emit("local _e=U[37][" .. dead_idx(u68) .. "];")
+    else
+      emit("local _d=U[37][" .. dead_idx(u68) .. "];")
+    end
+
+    -- PC 增量：handler 内部已经处理了跳转，顺序指令不需要额外增量
+    -- 基础循环已经做了 U[82]=U[82]+1
+    if not is_terminal then
+      emit("U[82]=U[82]+" .. gen_expr(0, u68) .. ";")
+    else
+      return_flags[i] = true
+    end
+
+    handler_parts[#handler_parts + 1] = "[" .. i .. "]=function(U)\\n" .. table.concat(body, "\\n") .. "\\nend"
+  end
+
+  -- 死 handler
+  for d = 1, math.random(3, 8) do
+    local fake_id = math.random(5000, 100000)
+    handler_parts[#handler_parts + 1] = "[" .. fake_id .. "]=function(U) U[37][" .. dead_idx(u68) .. "]=U[37][" .. dead_idx(u68) .. "]; end"
+    if math.random(1, 3) == 1 then return_flags[fake_id] = true end
+  end
+
+  local handlers_str = "{" .. table.concat(handler_parts, ",") .. "}"
+  -- 注意：handlers_str 是 string.format 的参数（非格式串），% 原样传递，无需转义
+  local retflags_str = "{"
+  for idx, _ in pairs(return_flags) do retflags_str = retflags_str .. "[" .. idx .. "]=true," end
+  retflags_str = retflags_str .. "}"
+
+  return handlers_str, retflags_str
+end
+
+-- 核心入口
+local function vm_advanced(source_code)
+  math.randomseed(math.floor(os.time() + os.clock() * 10000))
+
+  local parser = Parser.new(source_code)
+  local ast = parser:parse_block()
+  local compiler = Compiler.new()
+  compiler:compile_block(ast)
+  compiler:resolve_gotos()
+  if #compiler.code == 0 or compiler.code[#compiler.code].op ~= OPC.RETURN then
+    compiler:emit(OPC.RETURN, 0, 1, 0)
+  end
+  local proto = compiler:get_proto()
+
+  local op_map, name_to_rt = build_op_map()
+  local char_pool_enc, byte_to_idx, pool_key = build_char_pool(proto)
+  local u68 = math.random(1000, 999999)
+
+  local handlers_str, retflags_str = compile_proto(proto, op_map, name_to_rt, char_pool_enc, byte_to_idx, pool_key, u68)
+
+  local np = proto.numparams or 0
+  local ms = proto.maxstack or 1
+
+  local tpl = [====[
+  local S = _G or _ENV or getfenv(0)
+  local z = S["\\x73\\x65\\x74\\x6d\\x65\\x74\\x61\\x74\\x61\\x62\\x6c\\x65"]
+  local j = S["\\x67\\x65\\x74\\x6d\\x65\\x74\\x61\\x74\\x61\\x62\\x6c\\x65"]
+  local e = S["\\x74\\x61\\x62\\x6c\\x65"]["\\x63\\x6f\\x6e\\x63\\x61\\x74"]
+  local b = S["\\x65\\x72\\x72\\x6f\\x72"]
+  local i = S["\\x74\\x61\\x62\\x6c\\x65"]["\\x70\\x61\\x63\\x6b"]
+  local M = function(u,m,t)if(m and t and m>t)then return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](u,t,m)end;return S["\\x74\\x61\\x62\\x6c\\x65"]["\\x75\\x6e\\x70\\x61\\x63\\x6b"](u,m,t)end
+  local a = S["\\x73\\x74\\x72\\x69\\x6e\\x67"]["\\x63\\x68\\x61\\x72"]
+  local W = S["\\x74\\x79\\x70\\x65"]
+  local l
+  local p = "\\x66\\x75\\x6e\\x63\\x74\\x69\\x6f\\x6e"
+  local Z = "\\x74\\x61\\x62\\x6c\\x65"
+  local B = "\\x5f\\x5f\\x63\\x6c\\x6f\\x73\\x65"
+  local Q = "\\x5f\\x5f\\x69\\x6e\\x64\\x65\\x78"
+  local O = "\\x5f\\x5f\\x6e\\x65\\x77\\x69\\x6e\\x64\\x65\\x78"
+  l = function(N,T,o,X)
+    if W(N)==p then return N(M(T))end
+    local U={
+      [16]=T or {},
+      [28]=o or {[%s]=X or S},
+      [2]=X or S,
+      [37]={},
+      [24]=%s,
+      [68]=N[68],
+      [82]=%s,
+      [70]={},
+      [22]=N[22] or {},
+    }
+    for t=%s,N[32] do
+      U[37][t-%s]=U[16][t];U[24]=t-%s
+    end
+    local q=i((function()
+      while true do
+        local r=N[66][U[82]];U[82]=U[82]+%s
+        if r==nil then b();break end
+        if N[80][U[82]-%s]then return r(U)else r(U)end
+      end
+    end)())
+    for t=%s,N[4] do
+      if U[70][t]then
+        local I=U[70][t]
+        if I[11]==%s then
+          if W(U[37][I[43]])==p then U[37][I[43]]()
+          elseif W(U[37][I[43]])==Z and W(j(U[37][I[43]])[B])==p then j(U[37][I[43]])[B](U[37][I[43]])end
+        end
+        I[11]=%s;I[63]=U[37][I[43]];U[70][t]=nil
+      end
+    end
+    return M(q)
+  end
+  return l({[32]=%s,[4]=%s,[66]=%s,[80]=%s,[68]=%s,[22]={}},i(...))
+]====]
+
+  return string.format(tpl,
+    fold_literal(0), fold_literal(0), fold_literal(1),
+    fold_literal(1), fold_literal(1), fold_literal(1),
+    fold_literal(1), fold_literal(1), fold_literal(1),
+    fold_literal(25), fold_literal(2),
+    fold_literal(np), fold_literal(ms),
+    handlers_str, retflags_str, fold_literal(u68)
+  )
+end
+
+function M.protect(source_code) return vm_advanced(source_code) end
+return M]=], "@passes/vm_advanced.lua")()
+  end
   package.preload["passes.vm_protect"] = function()
     return load([[-- ================================================================
 -- passes/vm_protect.lua
@@ -6824,19 +8518,27 @@ local M = {}
 M.name        = "vm_protect"
 M.title       = "VM字节码虚拟化"
 M.description = "将Lua源码编译为自定义字节码，生成VM解释器执行"
-M.version     = "2.9.1"
+M.version     = "2.9.2"
 M.author      = "Rainy_qwq"
-M.order       = 10
+M.order       = 210  -- 最后执行：所有其他 Pass 先处理原始代码，VM 作为最终保护层
 M.enabled     = false  -- 默认关闭，需手动开启
 
 function M.apply(code, ctx)
-  local vm = ctx.vm_module or require("passes.vm")
+  local cfg = ctx.config or {}
+  local vm_mode = cfg.vm_mode or "standard"
+  local vm
+  if vm_mode == "advanced" then
+    vm = ctx.vm_module_advanced or require("passes.vm_advanced")
+  else
+    vm = ctx.vm_module or require("passes.vm")
+  end
   local result, err = vm.protect(code)
   if not result then
     error("VM保护失败: " .. tostring(err))
   end
   -- 外包 do...end 并添加 VM 标记，供 var_mangle 识别
-  return "-- @vm (protected)\\n-- VM Protected Code (op-pool + char-pool)\\ndo\\n" .. result .. "\\nend"
+  -- 使用唯一结束标记 @vm end 方便 extract_vm_blocks 精确定位
+  return "-- @vm (protected)\\n-- VM Protected Code (op-pool + char-pool)\\ndo\\n" .. result .. "\\nend\\n-- @vm (end)"
 end
 
 return M
@@ -6961,43 +8663,8 @@ return M
 
 ]], "@passes/vm_function.lua")()
   end
-  package.preload["passes.string_encrypt"] = function()
-    return load([[-- ================================================================
--- passes/string_encrypt.lua
--- 字符串加密
---
--- Author: Rainy_qwq
--- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
--- License: MIT
--- ================================================================
--- 将代码中的字符串字面量替换为运行时解密调用
--- 支持 XOR、ROT13、表驱动三种编码方式，随机选择
---
--- 注意：字符串的提取/恢复由 string_pool 处理，
--- 本 Pass 仅控制是否启用加密（与 Pipeline 解耦）
-
-local string_pool = require("passes.string_pool")
-
-local M = {}
-
-M.name    = "string_encryption"
-M.title   = "字符串加密"
-M.description = "将字符串常量替换为运行时解密调用，增加静态分析难度"
-M.version = "1.0.0"
-M.order   = 20
-
-function M.apply(code, _ctx)
-  -- 字符串提取+恢复由 obfuscator.lua 主流程处理
-  -- 此 Pass 仅作为 Pipeline 中的占位，用于配置管理
-  -- 如果禁用此 Pass，主流程将跳过字符串加密步骤
-  return code
-end
-
-return M
-]], "@passes/string_encrypt.lua")()
-  end
   package.preload["passes.var_mangle"] = function()
-    return load([[-- ================================================================
+    return load([==[-- ================================================================
 -- passes/var_mangle.lua
 -- 变量名混淆
 --
@@ -7041,13 +8708,16 @@ for _, w in ipairs({
 }) do RESERVED[w] = true end
 
 local BYTE_DOT = string.byte(".")
+local BYTE_APOS = string.byte("'")
+local BYTE_BACKSLASH = string.byte("\\\\")
+local BYTE_SINGLE_DASH = string.byte("-")
 
 -- 检查字符是否是数字
 local function is_digit(b)
   return b >= 48 and b <= 57
 end
 
--- 检查字符是否是标识符首字符 [a-zA-Z_] 
+-- 检查字符是否是标识符首字符 [a-zA-Z_]
 local function is_id_start(b)
   return (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95
 end
@@ -7055,6 +8725,42 @@ end
 -- 检查字符是否是标识符后续字符 [a-zA-Z0-9_]
 local function is_id_char(b)
   return is_id_start(b) or (b >= 48 and b <= 57)
+end
+
+-- 跳过普通字符串字面量，返回越过闭合引号后的位置
+-- 支持 "..." / '...'（含转义），以及 [[...]] / [=[...]=] 长字符串
+local function skip_string(code, pos, len)
+  local b = code:byte(pos)
+
+  if b == 34 or b == 39 then  -- " or '
+    local q = b
+    local j = pos + 1
+    while j <= len do
+      local c = code:byte(j)
+      if c == BYTE_BACKSLASH then
+        j = j + 2
+      elseif c == q then
+        return j + 1
+      else
+        j = j + 1
+      end
+    end
+    return len + 1
+  end
+
+  if b == 91 then  -- [
+    local eqs = code:match("^%[(=*)%[", pos)
+    if eqs then
+      local close = "]" .. eqs .. "]"
+      local cpos = code:find(close, pos + 2 + #eqs, true)
+      if cpos then
+        return cpos + #close
+      end
+    end
+    return pos + 1
+  end
+
+  return pos + 1
 end
 
 -- 从代码中提取所有标识符位置
@@ -7078,11 +8784,14 @@ local function scan_identifiers(code)
       end
 
     -- 跳过注释
-    elseif b == 45 and pos < len and code:byte(pos + 1) == 45 then
+    elseif b == BYTE_SINGLE_DASH and pos < len and code:byte(pos + 1) == BYTE_SINGLE_DASH then
       local nl = code:find("\\n", pos + 2, true)
       pos = nl and (nl + 1) or (len + 1)
 
-    -- 跳过字符串(已替换为占位符,不会到这里)
+    -- 跳过普通字符串字面量
+    elseif b == 34 or b == 39
+        or (b == 91 and code:match("^%[(=*)%[", pos)) then
+      pos = skip_string(code, pos, len)
 
     -- 标识符
     elseif is_id_start(b) then
@@ -7209,22 +8918,30 @@ local function collect_table_keys(code)
         elseif code:byte(i) == q then i = i + 1; break
         else i = i + 1 end
       end
-    -- Skip [expr] in table literals
+    -- Skip long strings/comments [[...]] / [=[...]=]
     elseif b == 91 then
-      i = i + 1
-      local depth = 1
-      while i <= len and depth > 0 do
-        local cb = code:byte(i)
-        if cb == 91 then depth = depth + 1; i = i + 1
-        elseif cb == 93 then depth = depth - 1; i = i + 1
-        elseif cb == 34 or cb == 39 then
-          local q2 = cb; i = i + 1
-          while i <= len do
-            if code:byte(i) == 92 then i = i + 2
-            elseif code:byte(i) == q2 then i = i + 1; break
-            else i = i + 1 end
-          end
-        else i = i + 1 end
+      local eqs = code:match("^%[(=*)%[", i)
+      if eqs then
+        local close = "]" .. eqs .. "]"
+        local cpos = code:find(close, i + 2 + #eqs, true)
+        i = cpos and (cpos + #close) or (len + 1)
+      else
+        -- Skip [expr] in table literals
+        i = i + 1
+        local depth = 1
+        while i <= len and depth > 0 do
+          local cb = code:byte(i)
+          if cb == 91 then depth = depth + 1; i = i + 1
+          elseif cb == 93 then depth = depth - 1; i = i + 1
+          elseif cb == 34 or cb == 39 then
+            local q2 = cb; i = i + 1
+            while i <= len do
+              if code:byte(i) == 92 then i = i + 2
+              elseif code:byte(i) == q2 then i = i + 1; break
+              else i = i + 1 end
+            end
+          else i = i + 1 end
+        end
       end
     -- Table literal: { key = value }
     elseif b == 123 then
@@ -7466,6 +9183,8 @@ function M.apply(code, ctx)
   end
 
   -- 构建 segment 数组，一次 concat 完成替换
+  -- 注意：扫描标识符时按代码原始位置定位，这里按 id 位置替换即可。
+  -- id.start / id.stop 是相对整个 code 的位置，since code 尚未被替换（extract 仅挖 VM 块），一致。
   local segments = {}
   local sn = 0
   local last_pos = 1
@@ -7499,7 +9218,7 @@ function M.apply(code, ctx)
 end
 
 return M
-]], "@passes/var_mangle.lua")()
+]==], "@passes/var_mangle.lua")()
   end
   package.preload["passes.num_encrypt"] = function()
     return load([[-- ================================================================
@@ -7522,8 +9241,8 @@ local M = {}
 
 M.name    = "constant_encryption"
 M.title   = "Constant Number Encryption"
-M.version = "1.3.1"
-M.order   = 50
+M.version = "1.4.0"
+M.order   = 25
 
 ------------------------------------------------------------
 -- Safe hex formatting (no string.format %X)
@@ -7614,7 +9333,7 @@ local function encrypt_int(n)
   --   * hex encoding of sum when sum > 0xFFFFFFFF (to_hex truncates)
 
   if abs_n <= 0xFFFF then
-    local method = random_int(1, 3)
+    local method = random_int(1, 6)
     if method == 1 then
       local a = to_u32(random_int(1, 0xFFFF))
       local xored = to_u32(a ~ abs_n)
@@ -7630,7 +9349,7 @@ local function encrypt_int(n)
       local a = random_int(1, max_a)
       local sum = abs_n + a
       return sign .. "(0x" .. hex4(sum) .. "-0x" .. hex4(a) .. ")"
-    else
+    elseif method == 3 then
       -- Safe shift only when abs_n << shift still fits in 16 bits
       local shift = random_int(1, 3)
       if abs_n < (0x10000 >> shift) then
@@ -7641,15 +9360,46 @@ local function encrypt_int(n)
         local xored = to_u32(a ~ abs_n)
         return sign .. "(0x" .. hex4(a) .. "~0x" .. hex4(xored) .. ")"
       end
+    elseif method == 4 then
+      -- 多层嵌套算术表达式: ((a + b) * c - d) 形式
+      local a = random_int(1, 99)
+      local b = random_int(1, 99)
+      local c = random_int(1, 99)
+      local d = random_int(1, 99)
+      local sub_patterns = {
+        function() return "(" .. a .. "+" .. b .. ")*" .. c .. "-" .. d end,
+        function() return "(" .. a .. "*" .. b .. ")+(" .. c .. "+" .. d .. ")" end,
+        function() return "(" .. a .. "+" .. b .. ")*(" .. c .. "+" .. d .. ")" end,
+        function() return "(" .. a .. "-" .. b .. ")*" .. c .. "+" .. d end,
+      }
+      local expr = sub_patterns[random_int(1, #sub_patterns)]()
+      local val = load("return " .. expr)()
+      local diff = abs_n - val
+      return sign .. "((" .. expr .. ")+(" .. tostring(diff) .. "))"
+    elseif method == 5 then
+      -- 取模运算: (a % b) + c
+      local a = random_int(abs_n + 1, abs_n + 999)
+      local b = random_int(abs_n + 1, abs_n + 999)
+      local c = abs_n - (a % b)
+      return sign .. "((" .. tostring(a) .. "%" .. tostring(b) .. ")+(" .. tostring(c) .. "))"
+    else
+      -- 位运算链: (a & b) | (c ~ d) 用纯十六进制
+      local a = to_u32(random_int(1, 0xFFFF))
+      local b = to_u32(random_int(1, 0xFFFF))
+      local c = to_u32(random_int(1, 0xFFFF))
+      local d = to_u32(random_int(1, 0xFFFF))
+      local val = to_u32(to_u32(to_u32(a & b)) | to_u32(c ~ d))
+      local diff = abs_n - val
+      return sign .. "(((0x" .. hex4(a) .. "&0x" .. hex4(b) .. ")|(0x" .. hex4(c) .. "~0x" .. hex4(d) .. "))+(" .. tostring(diff) .. "))"
     end
   elseif abs_n <= 0xFFFFFFFF then
-    local method = random_int(1, 2)
+    local method = random_int(1, 4)
     if method == 1 then
       -- XOR is bit-exact for full 32-bit range
       local a = to_u32(random_int(1, 0xFFFFFFFF))
       local xored = to_u32(a ~ abs_n)
       return sign .. "(0x" .. to_hex(a) .. "~0x" .. to_hex(xored) .. ")"
-    else
+    elseif method == 2 then
       -- Additive: keep sum within 32-bit so to_hex does not truncate
       local max_a = 0xFFFFFFFF - abs_n
       if max_a < 1 then
@@ -7661,6 +9411,27 @@ local function encrypt_int(n)
       local a = to_u32(random_int(1, math.min(max_a, 0xFFFFFF)))
       local sum = abs_n + a
       return sign .. "(0x" .. to_hex(sum) .. "-0x" .. to_hex(a) .. ")"
+    elseif method == 3 then
+      -- 多层算术表达式 (32-bit 安全)
+      local a = random_int(1, 999)
+      local b = random_int(1, 999)
+      local c = random_int(1, 999)
+      local d = random_int(1, 999)
+      local sub_patterns = {
+        function() return "(" .. a .. "+" .. b .. ")*" .. c .. "-" .. d end,
+        function() return "(" .. a .. "*" .. b .. ")+(" .. c .. "+" .. d .. ")" end,
+        function() return "(" .. a .. "-" .. b .. ")*" .. c .. "+" .. d end,
+      }
+      local expr = sub_patterns[random_int(1, #sub_patterns)]()
+      local val = load("return " .. expr)()
+      local diff = abs_n - val
+      return sign .. "((" .. expr .. ")+(" .. tostring(diff) .. "))"
+    else
+      -- 取模运算
+      local a = random_int(abs_n + 1, abs_n + 9999)
+      local b = random_int(abs_n + 1, abs_n + 9999)
+      local c = abs_n - (a % b)
+      return sign .. "((" .. tostring(a) .. "%" .. tostring(b) .. ")+(" .. tostring(c) .. "))"
     end
   else
     -- Beyond 32-bit: pure decimal additive (no bitwise / no hex truncation)
@@ -9123,13 +10894,13 @@ local M = {}
 
 M.name    = "header"
 M.title   = "添加代码头部"
-M.version = "1.1.0"
+M.version = "1.1.1"
 M.order   = 200
 
 function M.apply(code, _ctx)
   local header = string.format([=[
 -- ============================================================
--- Obfuscated by Lua Obfuscator v3.1.0
+-- Obfuscated by Lua Obfuscator v3.4.0
 -- https://github.com/Rainyqwq/Lua-Obfuscator
 -- Author: Rainy_qwq
 --
@@ -9318,6 +11089,491 @@ end
 return M
 ]], "@passes/call_indirect.lua")()
   end
+  package.preload["passes.api_indirect"] = function()
+    return load([[-- ================================================================
+-- passes/api_indirect.lua
+-- Global API Indirection (参考样本 S 表模式)
+--
+-- Author: Rainy_qwq
+-- URL:    https://github.com/Rainyqwq/Lua-Obfuscator
+-- License: MIT
+-- ================================================================
+-- 将所有全局 API 调用替换为通过运行时查找表调用
+-- 注入 local S = _G or _ENV or getfenv(0)
+-- 将 string.byte 替换为 S["\\x73\\x74\\x72\\x69\\x6e\\x67"]["\\x62\\x79\\x74\\x65"]
+-- 所有 API 名称用 hex 编码（\\xNN 格式）
+--
+-- 顺序：在 header 之前执行，所有其他 Pass 之后
+-- ================================================================
+
+local utils = require("passes.utils")
+local random_int = utils.random_int
+
+local M = {}
+
+M.name    = "api_indirection"
+M.title   = "全局API间接引用"
+M.description = "将所有全局API调用替换为运行时hex编码查找表引用"
+M.version = "1.0.0"
+M.order   = 190
+
+-- 需要间接引用的全局 API
+-- 格式：{name, lib}  lib为nil表示直接全局，否则是 table 的字段
+local API_LIST = {
+  -- string library
+  {name="byte", lib="string"},
+  {name="char", lib="string"},
+  {name="find", lib="string"},
+  {name="format", lib="string"},
+  {name="gmatch", lib="string"},
+  {name="gsub", lib="string"},
+  {name="len", lib="string"},
+  {name="lower", lib="string"},
+  {name="match", lib="string"},
+  {name="rep", lib="string"},
+  {name="reverse", lib="string"},
+  {name="sub", lib="string"},
+  {name="upper", lib="string"},
+
+  -- table library
+  {name="concat", lib="table"},
+  {name="insert", lib="table"},
+  {name="pack", lib="table"},
+  {name="remove", lib="table"},
+  {name="sort", lib="table"},
+  {name="unpack", lib="table"},
+
+  -- math library
+  {name="abs", lib="math"},
+  {name="acos", lib="math"},
+  {name="asin", lib="math"},
+  {name="atan", lib="math"},
+  {name="atan2", lib="math"},
+  {name="ceil", lib="math"},
+  {name="cos", lib="math"},
+  {name="cosh", lib="math"},
+  {name="deg", lib="math"},
+  {name="exp", lib="math"},
+  {name="floor", lib="math"},
+  {name="fmod", lib="math"},
+  {name="frexp", lib="math"},
+  {name="huge", lib="math"},
+  {name="ldexp", lib="math"},
+  {name="log", lib="math"},
+  {name="max", lib="math"},
+  {name="min", lib="math"},
+  {name="modf", lib="math"},
+  {name="pow", lib="math"},
+  {name="rad", lib="math"},
+  {name="random", lib="math"},
+  {name="randomseed", lib="math"},
+  {name="sin", lib="math"},
+  {name="sinh", lib="math"},
+  {name="sqrt", lib="math"},
+  {name="tan", lib="math"},
+  {name="tanh", lib="math"},
+
+  -- io library
+  {name="open", lib="io"},
+  {name="input", lib="io"},
+  {name="output", lib="io"},
+  {name="lines", lib="io"},
+  {name="read", lib="io"},
+  {name="write", lib="io"},
+  {name="close", lib="io"},
+  {name="flush", lib="io"},
+  {name="tmpfile", lib="io"},
+
+  -- os library
+  {name="clock", lib="os"},
+  {name="date", lib="os"},
+  {name="difftime", lib="os"},
+  {name="execute", lib="os"},
+  {name="exit", lib="os"},
+  {name="time", lib="os"},
+  {name="tmpname", lib="os"},
+
+  -- debug library
+  {name="traceback", lib="debug"},
+  {name="getinfo", lib="debug"},
+  {name="gethook", lib="debug"},
+  {name="sethook", lib="debug"},
+
+  -- coroutine library
+  {name="create", lib="coroutine"},
+  {name="resume", lib="coroutine"},
+  {name="running", lib="coroutine"},
+  {name="status", lib="coroutine"},
+  {name="wrap", lib="coroutine"},
+  {name="yield", lib="coroutine"},
+
+  -- global functions
+  {name="print"},
+  {name="type"},
+  {name="pairs"},
+  {name="ipairs"},
+  {name="next"},
+  {name="select"},
+  {name="tonumber"},
+  {name="tostring"},
+  {name="error"},
+  {name="assert"},
+  {name="pcall"},
+  {name="xpcall"},
+  {name="rawget"},
+  {name="rawset"},
+  {name="rawlen"},
+  {name="rawequal"},
+  {name="setmetatable"},
+  {name="getmetatable"},
+  {name="require"},
+  {name="dofile"},
+  {name="loadfile"},
+  {name="load"},
+  {name="collectgarbage"},
+  {name="unpack"},
+  {name="_VERSION"},
+}
+
+-- 转换为 Lua 安全 hex 编码字符串
+-- Lua 的 \\xNN 转义
+local function hex_escape(s)
+  local r = {}
+  for i = 1, #s do
+    local b = string.byte(s, i)
+    r[#r + 1] = string.format("\\\\x%02x", b)
+  end
+  return table.concat(r)
+end
+
+-- 生成折叠的算术表达式 (模仿样本的 ((857)*(-2814)+(2411598)) 格式)
+local function fold_int(n)
+  if n == 0 then return "(0x0|0)" end
+  if n == 1 then return "(0x1|0)" end
+  if n == -1 then return "(~0x0)" end
+
+  local abs_n = math.abs(n)
+  local sign = n < 0 and "-" or ""
+
+  -- 随机选择折叠方法
+  local method = math.random(1, 4)
+
+  if method == 1 then
+    -- XOR 形式: (a ~ b)
+    local a = math.random(1, 0xFFFF)
+    local xored = a ~ abs_n
+    return sign .. "(" .. tostring(a) .. "~" .. tostring(xored) .. ")"
+  elseif method == 2 then
+    -- 减法形式: (a - b)
+    local a = math.random(abs_n + 1, abs_n + 0xFFFF)
+    local b = a - abs_n
+    return sign .. "(" .. tostring(a) .. "-" .. tostring(b) .. ")"
+  elseif method == 3 then
+    -- 加法+乘法: (a * b + c)
+    local a = math.random(1, 100)
+    local b = math.random(1, 5000)
+    local c = abs_n - a * b
+    return sign .. "((" .. tostring(a) .. ")*(" .. tostring(b) .. ")+(" .. tostring(c) .. "))"
+  else
+    -- 多层: (a + b) * c - d 等
+    local a = math.random(1, 100)
+    local b = math.random(1, 100)
+    local c = math.random(1, 100)
+    local d = math.random(1, 100)
+    local patterns = {
+      function() return "(" .. tostring(a) .. "+" .. tostring(b) .. ")*" .. tostring(c) .. "-" .. tostring(d) end,
+      function() return "(" .. tostring(a) .. "*" .. tostring(b) .. ")+(" .. tostring(c) .. "-" .. tostring(d) .. ")" end,
+      function() return "(" .. tostring(a) .. "-" .. tostring(b) .. ")*" .. tostring(c) .. "+" .. tostring(d) end,
+    }
+    local expr = patterns[math.random(1, #patterns)]()
+    local val = load("return " .. expr)()
+    local diff = abs_n - val
+    return sign .. "((" .. expr .. ")+(" .. tostring(diff) .. "))"
+  end
+end
+
+-- 从代码中提取所有全局标识符位置
+local function scan_globals(code)
+  local globals = {}
+  local pos = 1
+  local len = #code
+  local BYTE_LF = string.byte("\\n")
+  local BYTE_CR = string.byte("\\r")
+  local BYTE_SP = string.byte(" ")
+  local BYTE_TAB = string.byte("\\t")
+  local BYTE_DOT = string.byte(".")
+  local BYTE_COLON = string.byte(":")
+  local BYTE_OPEN = string.byte("(")
+  local BYTE_CLOSE = string.byte(")")
+  local BYTE_COMMA = string.byte(",")
+  local BYTE_EQUALS = string.byte("=")
+  local BYTE_SEMI = string.byte(";")
+  local BYTE_LBRACK = string.byte("[")
+  local BYTE_RBRACK = string.byte("]")
+  local BYTE_QUOTE = string.byte('"')
+  local BYTE_APOS = string.byte("'")
+  local BYTE_DASH = string.byte("-")
+
+  while pos <= len do
+    local b = code:byte(pos)
+
+    -- 跳过字符串
+    if b == BYTE_QUOTE or b == BYTE_APOS then
+      local q = b
+      pos = pos + 1
+      while pos <= len do
+        if code:byte(pos) == 92 then pos = pos + 2  -- backslash
+        elseif code:byte(pos) == q then pos = pos + 1; break
+        else pos = pos + 1 end
+      end
+    -- 跳过注释
+    elseif b == BYTE_DASH and pos < len and code:byte(pos + 1) == BYTE_DASH then
+      local nl = code:find("\\n", pos + 2, true)
+      pos = nl and (nl + 1) or (len + 1)
+    -- 跳过长字符串/注释
+    elseif b == 91 then
+      local eqs = code:match("^%[(=*)%[", pos)
+      if eqs then
+        local close = "]" .. eqs .. "]"
+        local cpos = code:find(close, pos + 2 + #eqs, true) or len
+        pos = cpos + #close
+      else
+        pos = pos + 1
+      end
+    else
+      pos = pos + 1
+    end
+  end
+
+  return globals
+end
+
+-- 检查是否为 Lua 关键字
+local KEYWORDS = {}
+for _, w in ipairs({"and","break","do","else","elseif","end","false","for","function","goto",
+  "if","in","local","nil","not","or","repeat","return","then","true","until","while"}) do
+  KEYWORDS[w] = true
+end
+
+-- 构建 API 替换映射
+local function build_api_map()
+  local api_map = {}
+  for _, api in ipairs(API_LIST) do
+    local name = api.name
+    local lib = api.lib
+    local key = name
+    if lib then key = lib .. "." .. name end
+    api_map[key] = api
+  end
+  return api_map
+end
+
+-- 生成 S 表引用
+local function s_ref(name, lib)
+  local hex_name = hex_escape(name)
+  if lib then
+    local hex_lib = hex_escape(lib)
+    return 'S["' .. hex_lib .. '"]["' .. hex_name .. '"]'
+  else
+    return 'S["' .. hex_name .. '"]'
+  end
+end
+
+function M.apply(code, ctx)
+  -- 跳过单行/空代码
+  if not code or #code < 10 then return code end
+
+  -- 检测是否已经注入了 S 表（避免重复处理）
+  if code:find("local S = _G or _ENV or getfenv%(0%)", 1, true) then
+    return code
+  end
+
+  -- 当 VM 保护启用时跳过（VM 运行时已有自己的 S 表）
+  local cfg = ctx and ctx.config or {}
+  if cfg.vm_active then
+    return code
+  end
+
+  local api_map = build_api_map()
+
+  -- 收集代码中出现的所有全局 API 引用
+  local used_apis = {}
+  local pos = 1
+  local len = #code
+
+  -- 扫描代码中的 API 引用
+  -- 匹配模式：lib.name( 或 lib.name (  或 name(
+  for key, api in pairs(api_map) do
+    local name = api.name
+    local lib = api.lib
+    local pattern
+
+    if lib then
+      pattern = lib .. "%." .. name
+    else
+      pattern = name
+    end
+
+    -- 使用 gmatch 查找所有出现
+    local scan_pos = 1
+    while scan_pos <= len do
+      local s, e = code:find(pattern, scan_pos)
+      if not s then break end
+
+      -- 检查是否在注释或字符串中
+      local before = code:sub(math.max(1, s - 20), s - 1)
+      local in_comment = before:match("%-%-[^\\n]*$") ~= nil
+
+      if not in_comment then
+        -- 检查是否是独立的标识符（前后不是标识符字符）
+        local prev_char = (s > 1) and code:sub(s - 1, s - 1) or ""
+        local next_char = (e < len) and code:sub(e + 1, e + 1) or ""
+
+        local prev_ok = (prev_char == "" or prev_char:match("[^%w_]"))
+        local next_ok = (next_char == "" or next_char:match("[^%w_]"))
+
+        if prev_ok and next_ok then
+          used_apis[key] = true
+          scan_pos = e + 1
+        else
+          scan_pos = s + 1
+        end
+      else
+        scan_pos = e + 1
+      end
+    end
+  end
+
+  if not next(used_apis) then
+    return code
+  end
+
+  -- 注入 S 表声明
+  local prelude = "local S = _G or _ENV or getfenv(0); "
+
+  -- 对每个使用的 API 生成局部别名
+  -- 注意：S 表引用在运行时查找，所以不需要 local alias
+  -- 但为了性能，可选的 local alias 可以做
+
+  -- 替换代码中的 API 引用
+  local result = {}
+  local last_pos = 1
+  local scan_pos = 1
+
+  -- 构建替换表（按位置排序）
+  local replacements = {}
+
+  for key, _ in pairs(used_apis) do
+    local api = api_map[key]
+    local name = api.name
+    local lib = api.lib
+    local pattern
+
+    if lib then
+      pattern = lib .. "%." .. name
+    else
+      pattern = name
+    end
+
+    -- 查找所有出现位置
+    local p = 1
+    while p <= len do
+      local s, e = code:find(pattern, p)
+      if not s then break end
+
+      -- 检查是否在注释中
+      local before = code:sub(math.max(1, s - 20), s - 1)
+      local in_comment = before:match("%-%-[^\\n]*$") ~= nil
+
+      if not in_comment then
+        local prev_char = (s > 1) and code:sub(s - 1, s - 1) or ""
+        local next_char = (e < len) and code:sub(e + 1, e + 1) or ""
+
+        local prev_ok = (prev_char == "" or prev_char:match("[^%w_]"))
+        local next_ok = (next_char == "" or next_char:match("[^%w_]"))
+
+        if prev_ok and next_ok then
+          -- 跳过已处理的位置
+          local ref = s_ref(name, lib)
+          replacements[#replacements + 1] = {start = s, stop = e, ref = ref}
+          p = e + 1
+        else
+          p = s + 1
+        end
+      else
+        p = e + 1
+      end
+    end
+  end
+
+  -- 按位置排序（从后往前替换）
+  table.sort(replacements, function(a, b) return a.start < b.start end)
+
+  -- 构建结果
+  local last = 1
+  local segments = {}
+  local prev_end = 0
+  for i, r in ipairs(replacements) do
+    -- 跳过重叠的替换
+    if r.start > prev_end then
+      if r.start > last then
+        segments[#segments + 1] = code:sub(last, r.start - 1)
+      end
+      segments[#segments + 1] = r.ref
+      last = r.stop + 1
+      prev_end = r.stop
+    end
+  end
+  if last <= len then
+    segments[#segments + 1] = code:sub(last)
+  end
+
+  result = table.concat(segments)
+
+  -- 注入 S 声明
+  result = prelude .. result
+
+  return result
+end
+
+return M]], "@passes/api_indirect.lua")()
+  end
+  package.preload["passes.string_restore"] = function()
+    return load([[-- ================================================================
+-- passes/string_restore.lua
+-- 字符串恢复 Pass（Pipeline 尾端）
+--
+-- 依赖 string_pool 在 pipeline 前的 extract 结果，
+-- 将 token 替换为运行时解密调用或原文。
+-- ================================================================
+
+local string_pool = require("passes.string_pool")
+
+local M = {}
+
+M.name    = "string_restore"
+M.title   = "字符串恢复"
+M.version = "1.0.0"
+M.order   = 220  -- 最后执行（在 vm_protect 之后，header 之前）
+M.enabled = true
+
+-- 注意：此 Pass 在 VM 保护启用时无操作，因为 extract 阶段已跳过。
+-- 当 VM 禁用时，extract 阶段已提取字符串，这里进行恢复。
+function M.apply(code, ctx)
+  -- 如果 string_pool 没有 token，直接返回原代码
+  if not next(string_pool.pool) then return code end
+
+  local cfg = ctx and ctx.config or {}
+  local do_encrypt = cfg.string_encryption
+  if do_encrypt then
+    return string_pool.restore(code)
+  else
+    return string_pool.restore_raw(code)
+  end
+end
+
+return M]], "@passes/string_restore.lua")()
+  end
   package.preload["passes.init"] = function()
     return load([[-- ================================================================
 -- passes/init.lua
@@ -9339,10 +11595,10 @@ local M = {}
 -- 内置 Pass 列表（显式声明，不依赖文件系统扫描）
 -- 顺序不影响执行顺序（由各 Pass 的 order 字段控制）
 local BUILTIN = {
+  "passes.string_pool",   -- order=0: string extract envelope (name "string_extract")
   "passes.vm_function",
   "passes.vm_protect",
   "passes.anti_debug",
-  "passes.string_encrypt",
   "passes.num_encrypt",
   "passes.instr_sub",
   "passes.var_mangle",
@@ -9352,7 +11608,9 @@ local BUILTIN = {
   "passes.bb_split",
  "passes.junk_comment",
   "passes.call_indirect",
+  "passes.api_indirect",
   "passes.header",
+  "passes.string_restore",
 }
 
 -- 加载所有内置 Pass 并注册到 PassManager
@@ -9428,7 +11686,7 @@ end
 -- ============================================================
 -- 版本
 -- ============================================================
-local VERSION = "3.1.0"
+local VERSION = "3.3.0"
 
 -- ============================================================
 -- 加载 Pass 系统
@@ -9459,6 +11717,9 @@ local Config = {
   anti_debug                = false,
   call_indirection          = true,
    vm_function               = false,
+  api_indirection           = true,
+  single_line               = false,
+  vm_mode                   = "standard", -- "standard" | "advanced"
   -- P1: protection lists (not pass toggles)
   name_whitelist            = {}, -- identifier names preserved by var_mangle
   string_whitelist          = {}, -- exact string values kept plaintext
@@ -9468,7 +11729,6 @@ local Config = {
 -- Config key -> Pass name mapping
 local CONFIG_TO_PASS = {
   vm_protect                = "vm_protect",
-  string_encryption         = "string_encryption",
   variable_mangling         = "variable_mangling",
   instruction_substitution  = "instruction_substitution",
   constant_encryption       = "constant_encryption",
@@ -9480,6 +11740,7 @@ local CONFIG_TO_PASS = {
   anti_debug                = "anti_debug",
   call_indirection          = "call_indirection",
   vm_function               = "vm_function",
+  api_indirection           = "api_indirection",
 }
 
 local PASS_KEYS = {
@@ -9487,6 +11748,7 @@ local PASS_KEYS = {
   "instruction_substitution", "constant_encryption", "advanced_fake_cf",
   "control_flow_flattening", "bogus_control_flow", "basic_block_splitting",
   "vm_function", "junk_comments", "anti_debug", "call_indirection",
+  "api_indirection", "single_line",
 }
 
 -- Protection presets: fast / balanced / max
@@ -9498,6 +11760,7 @@ local PRESETS = {
     advanced_fake_cf = false, control_flow_flattening = false,
     bogus_control_flow = false, basic_block_splitting = false,
      junk_comments = true, call_indirection = false, vm_function = false,
+    api_indirection = false, single_line = false,
   },
   balanced = {
     vm_protect = false, anti_debug = false,
@@ -9506,6 +11769,7 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
      junk_comments = true, call_indirection = true, vm_function = true,
+    api_indirection = true, single_line = false,
   },
   max = {
     vm_protect = false, anti_debug = true,
@@ -9514,6 +11778,7 @@ local PRESETS = {
     advanced_fake_cf = true, control_flow_flattening = true,
     bogus_control_flow = true, basic_block_splitting = true,
     junk_comments = true, call_indirection = true, vm_function = true,
+    api_indirection = true, single_line = true,
   },
 }
 
@@ -9558,6 +11823,26 @@ local function sync_config_to_passes()
   string_pool.set_whitelist(Config.string_whitelist)
    -- vm_function and vm_protect are mutually exclusive
    if Config.vm_function then Config.vm_protect = false end
+   -- Pass vm_mode to vm_protect config
+   pm:set_pass_config("vm_protect", {
+     vm_mode = Config.vm_mode or "standard",
+   })
+   -- Pass string_encryption toggle to string_restore pass
+   pm:set_pass_config("string_restore", {
+     string_encryption = Config.string_encryption and true or false,
+   })
+   -- Let string_extract know whether VM is active (skip extraction)
+   local vm_active = (pm:get("vm_protect") or {}).enabled and true or false
+   pm:set_pass_config("string_extract", {
+     vm_active = vm_active,
+   })
+   -- Let api_indirection know whether VM is active (skip rewriting)
+   pm:set_pass_config("api_indirection", {
+     vm_active = vm_active,
+   })
+   -- Always enable the string envelope passes
+   pm:set_enabled("string_extract", true)
+   pm:set_enabled("string_restore", true)
 end
 
 -- ============================================================
@@ -9566,23 +11851,13 @@ end
 local function obfuscate(code, vm_module)
   sync_config_to_passes()
 
-  -- 检查 VM 保护是否启用
-  local vm_pass = pm:get("vm_protect")
-  local do_vm = vm_pass and vm_pass.enabled
-
-  -- Passes are expected to be independently correct.
-  -- Do not silently disable user-selected passes for "compatibility".
-  -- Structural passes may still rewrite VM output; that is a pass-quality
-  -- issue and should be fixed in the pass itself (see bcf/bb_split/etc).
-
-  -- 字符串提取（VM保护时跳过，VM自己处理字符串）
-  if not do_vm then
-    code = string_pool.extract(code)
-  end
-
   -- 执行 Pass Pipeline
+  -- string_pool（注册名 string_extract，order=0）作为 pipeline 第一个 pass 负责字符串提取，
+  -- string_restore（order=220）作为 pipeline 最后一个 pass 负责字符串恢复。
+  -- VM 保护启用时，string_extract 跳过（VM 自己处理字符串）。
   local ok, result, log = pcall(pm.run, pm, code, {
     vm_module = vm_module,
+    vm_module_advanced = require("passes.vm_advanced"),
     max_total_ms = 120000,
   })
 
@@ -9590,15 +11865,15 @@ local function obfuscate(code, vm_module)
     error("混淆失败: " .. tostring(result))
   end
 
-  -- 字符串恢复（VM保护时跳过）
-  if not do_vm then
-    local string_pass = pm:get("string_encryption")
-    local do_encrypt = string_pass and string_pass.enabled
-    if do_encrypt then
-      result = string_pool.restore(result)
-    else
-      result = string_pool.restore_raw(result)
-    end
+  -- 单行输出模式
+  if Config.single_line then
+    result = result:gsub("\\n([^\\n]*%-%-[^\\n]*)", function(comment)
+      -- 删除注释行，替换为空白
+      return ""
+    end)
+    result = result:gsub("\\n", " ")
+    result = result:gsub("%s+", " ")
+    result = result:gsub("^%s+", "")
   end
 
   return result, log
@@ -9914,7 +12189,13 @@ function M.set_config(options)
   if options.string_whitelist ~= nil then
     Config.string_whitelist = copy_list(options.string_whitelist)
   end
-  -- Sync config changes to PassManager
+  if options.vm_mode ~= nil then
+    Config.vm_mode = options.vm_mode
+  end
+  if options.single_line ~= nil then
+    Config.single_line = options.single_line and true or false
+  end
+  -- Sync config to PassManager
   sync_config_to_passes()
 end
 function M.apply_preset(name)
@@ -10098,18 +12379,20 @@ const FEATURES = [
   { id: 'adv_fake',      name: '虚假控制流',   desc: 'AdvFake',    default: true },
   { id: 'junk_comment',  name: '垃圾注释',     desc: 'Junk',       default: true },
   { id: 'vm_protect',    name: 'VM字节码保护', desc: 'VM',         default: false },
+  { id: 'vm_mode',       name: 'VM高级模式',   desc: 'VMAdv',     default: false },
   { id: 'vm_function',    name: '函数级VM保护',    desc: 'VMFunc',     default: false },
   { id: 'anti_debug',    name: '反调试检测',   desc: 'AntiDebug',  default: false },
   { id: 'call_indirect', name: '调用间接化',   desc: 'CallIndir',  default: true },
+  { id: 'api_indirect',  name: 'API间接引用',  desc: 'APIIndir',  default: true },
 ];
 
 let config = {};
 FEATURES.forEach(f => config[f.id] = f.default);
 let currentPreset = 'balanced';
 const PRESET_MAP = {
-  fast: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:false,bb_split:false,bcf:false,instr_sub:false,adv_fake:false,junk_comment:true,vm_protect:false,anti_debug:false,call_indirect:false,vm_function:false },
-  balanced: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:false,anti_debug:false,call_indirect:true,vm_function:true },
-  max: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:true,anti_debug:true,call_indirect:true,vm_function:true },
+  fast: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:false,bb_split:false,bcf:false,instr_sub:false,adv_fake:false,junk_comment:true,vm_protect:false,vm_mode:false,anti_debug:false,call_indirect:false,vm_function:false,api_indirect:false },
+  balanced: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:false,vm_mode:false,anti_debug:false,call_indirect:true,vm_function:true,api_indirect:true },
+  max: { var_mangle:true,num_encrypt:true,str_encrypt:true,cf_flatten:true,bb_split:true,bcf:true,instr_sub:true,adv_fake:true,junk_comment:true,vm_protect:true,vm_mode:false,anti_debug:true,call_indirect:true,vm_function:true,api_indirect:true },
 };
 function parseCsvList(text){ if(!text) return []; return text.split(/[,\n]/).map(s=>s.trim()).filter(Boolean); }
 function getNameWhitelist(){ const el=document.getElementById('name-whitelist'); return parseCsvList(el?el.value:''); }
@@ -10126,20 +12409,43 @@ function buildLuaOpts(){
     advanced_fake_cf: config.adv_fake,
     junk_comments: config.junk_comment,
     vm_protect: config.vm_protect,
+    vm_mode: config.vm_mode ? 'advanced' : 'standard',
     vm_function: config.vm_function,
     ...(config.vm_function ? { vm_protect: false } : {}),
     anti_debug: config.anti_debug,
     call_indirection: config.call_indirect,
+    api_indirection: config.api_indirect,
     name_whitelist: getNameWhitelist(),
     string_whitelist: getStringWhitelist(),
     preset: currentPreset,
   };
 }
 function syncPresetRadios(){
-  document.querySelectorAll('#preset-row input[type=radio]').forEach(r=>{
-    r.checked = r.value === currentPreset;
-    if (r.parentElement) r.parentElement.className = r.checked ? 'on' : '';
+  document.querySelectorAll('#preset-row button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.preset === currentPreset);
   });
+  syncSegPill();
+}
+// Sliding indicator under the active preset button (DESIGN §5)
+// Sliding pill sync — sets three CSS vars consumed by `.seg::after`:
+//   --pill-x: translateX distance (animatable, compositor-only)
+//   --pill-w: pill width (set once, not animated — only changes on resize/font-load)
+//   --pill-s: scaleX(0 → 1) for first-paint appearance
+// Animating only transform avoids the per-frame layout that the previous
+// left/width approach triggered.
+function syncSegPill(){
+  const seg = document.getElementById('preset-row');
+  if (!seg) return;
+  const active = seg.querySelector('button.on');
+  if (!active) {
+    seg.style.setProperty('--pill-s', '0');
+    return;
+  }
+  const sR = seg.getBoundingClientRect();
+  const aR = active.getBoundingClientRect();
+  seg.style.setProperty('--pill-x', (aR.left - sR.left) + 'px');
+  seg.style.setProperty('--pill-w', aR.width + 'px');
+  seg.style.setProperty('--pill-s', '1');
 }
 function applyPreset(name, opts){
   opts = opts || {};
@@ -10150,11 +12456,17 @@ function applyPreset(name, opts){
   } else currentPreset = 'custom';
   FEATURES.forEach(f => {
     const cb = document.querySelector('input[data-feat="'+f.id+'"]');
-    if (cb) { cb.checked = !!config[f.id]; if (cb.parentElement) cb.parentElement.className = config[f.id] ? 'on' : ''; }
+    if (cb) { cb.checked = !!config[f.id]; cb.closest('.feature-toggle').classList.toggle('on', config[f.id]); }
   });
   syncPresetRadios();
   if (!opts.silent && typeof setStatus === 'function') setStatus('预设: ' + currentPreset, 'ok');
 }
+const FEATURE_GROUPS = [
+  { title: '基础', ids: ['var_mangle', 'num_encrypt', 'str_encrypt', 'instr_sub', 'junk_comment'] },
+  { title: '控制流', ids: ['cf_flatten', 'bb_split', 'bcf', 'adv_fake'] },
+  { title: '虚拟机', ids: ['vm_protect', 'vm_mode', 'vm_function', 'anti_debug'] },
+  { title: 'API 与调用', ids: ['call_indirect', 'api_indirect'] },
+];
 function markCustomPreset(){ currentPreset = 'custom'; syncPresetRadios(); }
 function exportConfig(){
   const payload = { version:'3.0.0', preset:currentPreset, features:Object.assign({},config), name_whitelist:getNameWhitelist(), string_whitelist:getStringWhitelist() };
@@ -10174,7 +12486,7 @@ function importConfig(event){
       if (data.preset && PRESET_MAP[data.preset] && !data.features) applyPreset(data.preset);
       else {
         currentPreset = data.preset || 'custom';
-        FEATURES.forEach(f => { const cb=document.querySelector('input[data-feat="'+f.id+'"]'); if(cb){ cb.checked=!!config[f.id]; if(cb.parentElement) cb.parentElement.className=config[f.id]?'on':''; } });
+        FEATURES.forEach(f => { const cb=document.querySelector('input[data-feat="'+f.id+'"]'); if(cb){ cb.checked=!!config[f.id]; cb.closest('.feature-toggle').classList.toggle('on', !!config[f.id]); } });
         syncPresetRadios();
       }
       setStatus('已导入配置: '+file.name,'ok');
@@ -10184,28 +12496,624 @@ function importConfig(event){
 }
 
 
+// Theme state — module-scope (single source of truth, no DOM lookups in hot path)
+const Theme = {
+  // 'light' | 'dark' — current resolved mode
+  mode: 'light',
+  // 'system' | 'light' | 'dark' — user override ('system' = follow OS)
+  userPref: null,
+  // MediaQueryList for system theme — re-used across listeners
+  mq: null,
+};
+
+// Resolve the effective theme given userPref + current OS state.
+function resolveTheme() {
+  if (Theme.userPref === 'light' || Theme.userPref === 'dark') return Theme.userPref;
+  return Theme.mq && Theme.mq.matches ? 'dark' : 'light';
+}
+
+// Apply resolved mode to <html>. The actual DOM mutation is wrapped in
+// startViewTransition (Chrome 111+) so the browser handles the cross-fade
+// + clip-path reveal automatically. Older browsers get a JS-animated fallback.
+function applyTheme(mode, originCoords) {
+  Theme.mode = mode;
+  const root = document.documentElement;
+  const swap = () => {
+    root.classList.toggle('dark', mode === 'dark');
+    root.classList.toggle('light', mode === 'light');
+  };
+
+  // If no origin coords (system theme change, init), skip animation.
+  if (!originCoords) { swap(); return; }
+
+  // 1. Native path — View Transitions API (Chrome 111+, Edge 111+).
+  // Used for the actual spread animation (clip-path from click point to
+  // viewport). The OLD flash bug was caused by `::view-transition-old(root)`
+  // sitting visible for one frame AFTER the transition's done — fixed by
+  // setting both pseudo-elements' opacity to 0 explicitly at finish (via
+  // CSS animation with fill:forwards). The JS fallback below is used when
+  // SVT isn't available.
+  const USE_NATIVE_SVT = true;
+  if (USE_NATIVE_SVT && typeof document.startViewTransition === 'function') {
+    const isDark = mode === 'dark';
+    const x = originCoords.x;
+    const y = originCoords.y;
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+    let transition;
+    try {
+      transition = document.startViewTransition(() => {
+        swap();
+      });
+    } catch (e) {
+      // startViewTransition threw — fall through to JS fallback
+      // by directly swapping and returning. The caller should re-invoke
+      // applyTheme() with the fallback path, but since we're already past
+      // the SVT branch, we just bail.
+      swap();
+      return;
+    }
+    // Make sure the final class state is correct even if the transition is
+    // cancelled before reaching the `swap()` callback (rare but happens).
+    transition.finished.then(() => {
+      const root = document.documentElement;
+      if (mode === 'dark' && !root.classList.contains('dark')) swap();
+      else if (mode === 'light' && !root.classList.contains('light')) swap();
+      // Hide the JS fallback veil if it was somehow created
+      const veil = document.getElementById('theme-veil');
+      if (veil) { veil.style.display = 'none'; }
+    }).catch(() => {});
+
+    transition.ready.then(() => {
+      // For light->dark: animate ::view-transition-new(root) clip-path from
+      //   0 (invisible at origin) → endRadius (covers viewport).
+      //   This reveals the new (dark) snapshot growing from the click point.
+      // For dark->light: animate ::view-transition-old(root) clip-path from
+      //   endRadius (covering viewport with old dark) → 0 (retracted to origin).
+      //   This hides the old (dark) snapshot back to the click point,
+      //   revealing the new (light) snapshot behind it.
+      const clipPath = [
+        `circle(0px at ${x}px ${y}px)`,
+        `circle(${endRadius}px at ${x}px ${y}px)`,
+      ];
+      try {
+        const waapiAnim = document.documentElement.animate(
+          { clipPath: isDark ? clipPath : [...clipPath].reverse() },
+          {
+            duration: 280,
+            easing: 'linear',
+            pseudoElement: isDark ? '::view-transition-new(root)' : '::view-transition-old(root)',
+          }
+        );
+        // Force the SVT to its end state the moment our WAAPI clip-path
+        // animation finishes. Without this, ::view-transition-old(root)
+        // (for dark→light) sits visible for a beat after the clip-path has
+        // shrunk to 0, painting a residual dark frame — the "flash" users
+        // see. skipTransition() aborts the SVT right after our animation lands.
+        waapiAnim.addEventListener('finish', () => {
+          try { transition.skipTransition(); } catch (e) {}
+        });
+      } catch (e) { /* pseudo-element may not exist; ignore */ }
+    }).catch(() => { /* transition was skipped */ });
+    return;
+  }
+
+  // 2. JS fallback — animate a body-level veil whose clip-path either
+  // grows from the click point (light->dark) or shrinks back to it
+  // (dark->light). The veil is always painted with the OLD theme color
+  // (or the new one, in the reverse direction) so the user sees the
+  // theme changing as the veil expands / contracts.
+  const prefersReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduce) { swap(); return; }
+
+  const x = originCoords.x;
+  const y = originCoords.y;
+  const endRadius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+  // Hard-coded background colors matching :root / :root.dark — these MUST
+  // stay in sync with tokens.css. We don't read them from the DOM because
+  // that would force a swap-and-swap-back reflow that itself flashes the
+  // wrong background for one frame. Source-of-truth: see :root and :root.dark.
+  const isDark = mode === 'dark';
+  const oldBg = isDark ? '#1c1c1e' : '#f5f5f7';   // before swap
+  const newBg = isDark ? '#f5f5f7' : '#1c1c1e';   // after swap (we'll swap halfway)
+
+  let veil = document.getElementById('theme-veil');
+  if (!veil) {
+    veil = document.createElement('div');
+    veil.id = 'theme-veil';
+    document.body.appendChild(veil);
+  }
+  // Setup veil — start at click point. Veil color = OLD theme so covering
+  // with it makes the visible theme stay OLD during animation; we then swap
+  // the class at 50% to reveal the NEW theme.
+  veil.style.background = oldBg;
+  veil.style.transition = 'none';
+  veil.style.clipPath = isDark
+    ? `circle(0px at ${x}px ${y}px)`                     // expand from origin
+    : `circle(${endRadius}px at ${x}px ${y}px)`;          // shrink from full
+  // Force layout/paint of the starting frame BEFORE enabling transition,
+  // otherwise the browser may coalesce the start-state + animation into a
+  // single paint frame and skip the initial 0% state.
+  void veil.offsetWidth;
+  veil.style.transition = 'clip-path 280ms linear';
+
+  // The animation has two halves:
+  //   light->dark: veil (light) expands from 0 → full. Underneath the page
+  //               is still light. At ~50% we swap to dark. At end, veil is
+  //               clipped back to 0 and its color is dark → invisible reveal.
+  //   dark->light: veil (dark) contracts from full → 0. Underneath the page
+  //               is still dark. At ~50% we swap to light. At end, veil is
+  //               clipped to 0 and its color is light → invisible reveal.
+  veil.addEventListener('transitionend', function onEnd(e) {
+    if (e.propertyName !== 'clip-path') return;
+    veil.removeEventListener('transitionend', onEnd);
+    cleanupVeil();
+  }, { once: false });
+  // Safety net: if transitionend never fires (some browsers throttle
+  // transitionend when display:none lands first, or the listener is
+  // detached mid-animation), force cleanup after the animation duration.
+  const veilSafetyTimer = setTimeout(cleanupVeil, 450);
+
+  function cleanupVeil() {
+    clearTimeout(veilSafetyTimer);
+    // Detach from the layout tree instantly so the compositor can't paint a
+    // residual frame. We force two sync style flushes around the display:none
+    // so the browser commits the final transition frame, then drops the
+    // layer — any ordering glitch between these two paints is what
+    // produces the "black flash" users see at animation end.
+    void veil.getBoundingClientRect();
+    // Set opacity:0 first (synchronously), then detach. opacity:0 makes the
+    // veil invisible to the compositor's next paint, even if the layer is
+    // still in the tree. Then display:none fully detaches it.
+    veil.style.opacity = '0';
+    void veil.getBoundingClientRect();
+    veil.style.display = 'none';
+    veil.style.clipPath = `circle(0px at ${x}px ${y}px)`;
+    veil.style.background = '';
+    veil.style.opacity = '';
+    veil.style.transition = '';
+    void veil.getBoundingClientRect();
+  }
+
+  // Reveal veil — must clear display:none before triggering the clip-path
+  // change, otherwise the browser skips the initial 0% state and the
+  // animation snaps to the final frame (no visible spread at all).
+  veil.style.display = 'block';
+  // Kick off the clip-path animation. At this point veil is visible at its
+  // starting clip-path (0 or endRadius), color = oldBg.
+  veil.style.clipPath = isDark
+    ? `circle(${endRadius}px at ${x}px ${y}px)`            // expand
+    : `circle(0px at ${x}px ${y}px)`;                     // contract
+
+  // At 50% mark, do two things together: swap the underlying theme class
+  // (so body bg changes), AND change the veil's color to the NEW theme.
+  // Both happen at exactly the same moment, so the user sees a single
+  // transition with no flash — the veil shrinks AND the body behind it
+  // is already the new color when the veil becomes small.
+  setTimeout(() => {
+    swap();
+    veil.style.background = newBg;
+  }, 140);
+}
+
+// Animation parameters
+const TRANSITION_DUR = 500;   // ms — must match applyTheme() clip-path animation
+
+// The expansion/reveal effect is now handled by applyTheme() using the
+// browser's native View Transitions API (with a clip-path JS fallback).
+// The old button-internal ripple pseudo-element was removed because it was
+// clipped by the button bounds and never escaped its stacking context.
+
+// User click — switch to the opposite of the resolved mode. Captures
+// the click coordinates so applyTheme() can animate the transition from
+// the right origin point.
+function toggleTheme(event) {
+  const btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  const next = Theme.mode === 'dark' ? 'light' : 'dark';
+  // Persist user override (this stops the OS listener from overwriting it)
+  Theme.userPref = next;
+  try { localStorage.setItem('theme', next); } catch (e) { /* private mode */ }
+  // event may be undefined when called from keyboard — fall back to button center
+  const coords = event
+    ? { x: event.clientX, y: event.clientY }
+    : (function () {
+        const r = btn.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      })();
+  applyTheme(next, coords);
+}
+
+// React to OS theme changes — only when the user hasn't pinned a preference
+function onSystemThemeChange(e) {
+  if (Theme.userPref === null) applyTheme(e.matches ? 'dark' : 'light');
+}
+
+// Initialize theme state from localStorage and OS preference.
+function initTheme() {
+  const root = document.documentElement;
+  Theme.mq = window.matchMedia('(prefers-color-scheme: dark)');
+  let saved = null;
+  try { saved = localStorage.getItem('theme'); } catch (e) { /* private mode */ }
+  if (saved === 'light' || saved === 'dark') {
+    Theme.userPref = saved;
+  } else {
+    Theme.userPref = null;
+    try { localStorage.removeItem('theme'); } catch (e) {}
+  }
+  applyTheme(resolveTheme());
+  // Listen for OS theme changes. Modern API preferred; fall back to legacy addListener.
+  if (Theme.mq.addEventListener) Theme.mq.addEventListener('change', onSystemThemeChange);
+  else if (Theme.mq.addListener) Theme.mq.addListener(onSystemThemeChange);
+}
+
+// ============================================================
+// Lua syntax highlighter — single-pass tokenizer for editor overlay
+// ============================================================
+const LUA_KEYWORDS = {
+  // control flow
+  'and':'k','break':'k','do':'k2','else':'k','elseif':'k','end':'k2',
+  'false':'lit','for':'k','function':'k','goto':'k','if':'k','in':'k',
+  'local':'k','nil':'lit','not':'k','or':'k','repeat':'k','return':'k2',
+  'then':'k2','true':'lit','until':'k2','while':'k'
+};
+const LUA_BUILTINS = new Set([
+  'print','pairs','ipairs','tostring','tonumber','type','error','assert',
+  'pcall','xpcall','select','next','setmetatable','getmetatable','rawget',
+  'rawset','rawequal','rawlen','unpack','table','string','math','io','os',
+  'require','dofile','loadfile','loadstring','load','collectgarbage','coroutine',
+  '_G','_VERSION','getfenv','setfenv','debug','package'
+]);
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+function highlightLua(src) {
+  // Returns HTML with token spans. Order matters: strings/comments first.
+  let out = '';
+  let i = 0, n = src.length;
+  while (i < n) {
+    const c = src[i], c2 = src[i+1];
+    // Line comment
+    if (c === '-' && c2 === '-') {
+      // Long comment --[[ ... ]]
+      if (src[i+2] === '[' && src[i+3] === '[') {
+        const end = src.indexOf(']]', i + 4);
+        const stop = end < 0 ? n : end + 2;
+        out += '<span class="tok-comment">' + escapeHtml(src.slice(i, stop)) + '</span>';
+        i = stop;
+        continue;
+      }
+      const nl = src.indexOf('\n', i);
+      const stop = nl < 0 ? n : nl;
+      out += '<span class="tok-comment">' + escapeHtml(src.slice(i, stop)) + '</span>';
+      i = stop;
+      continue;
+    }
+    // String literal
+    if (c === '"' || c === "'") {
+      const q = c;
+      let j = i + 1;
+      // Continue past newlines: an unclosed string token must not stop at \n
+      // (otherwise typing a quote then Enter repaints the next line as code).
+      while (j < n) {
+        if (src[j] === '\\') { j += 2; continue; }
+        if (src[j] === q) { j++; break; }
+        j++;
+      }
+      out += '<span class="tok-string">' + escapeHtml(src.slice(i, j)) + '</span>';
+      i = j;
+      continue;
+    }
+    // Long string [=*[ ... ]=*] — supports any =level (Lua 5.x spec)
+    if (c === '[' && c2 === '[') {
+      const openMatch = /^\[(\=*)\[/.exec(src.slice(i));
+      const level = openMatch ? openMatch[1].length : 0;
+      const openLen = 2 + level;
+      const close = ']' + '='.repeat(level) + ']';
+      const end = src.indexOf(close, i + openLen);
+      const stop = end < 0 ? n : end + close.length;
+      out += '<span class="tok-string">' + escapeHtml(src.slice(i, stop)) + '</span>';
+      i = stop;
+      continue;
+    }
+    // Number (hex, decimal, exp)
+    if (/[0-9]/.test(c)) {
+      let j = i;
+      // Hex literal — only treat as hex if at least one hex digit follows 0x
+      if (c === '0' && (src[j+1] === 'x' || src[j+1] === 'X') && /[0-9a-fA-F]/.test(src[j+2])) {
+        j += 2;
+        while (j < n && /[0-9a-fA-F]/.test(src[j])) j++;
+        // optional .fraction + p exponent
+        if (src[j] === '.') { j++; while (j < n && /[0-9a-fA-F]/.test(src[j])) j++; }
+        if (src[j] === 'p' || src[j] === 'P') {
+          j++; if (src[j] === '+' || src[j] === '-') j++;
+          while (j < n && /[0-9]/.test(src[j])) j++;
+        }
+      }
+      else {
+        while (j < n && /[0-9]/.test(src[j])) j++;
+        if (src[j] === '.') { j++; while (j < n && /[0-9]/.test(src[j])) j++; }
+        if (src[j] === 'e' || src[j] === 'E') { j++; if (src[j] === '+' || src[j] === '-') j++; while (j < n && /[0-9]/.test(src[j])) j++; }
+      }
+      out += '<span class="tok-number">' + escapeHtml(src.slice(i, j)) + '</span>';
+      i = j;
+      continue;
+    }
+    // Identifier / keyword / builtin
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i;
+      while (j < n && /[A-Za-z0-9_]/.test(src[j])) j++;
+      const word = src.slice(i, j);
+      const kw = LUA_KEYWORDS[word];
+      if (kw === 'k') out += '<span class="tok-keyword">' + word + '</span>';
+      else if (kw === 'k2') out += '<span class="tok-keyword2">' + word + '</span>';
+      else if (kw === 'lit') out += '<span class="tok-keyword">' + word + '</span>';
+      else if (LUA_BUILTINS.has(word)) out += '<span class="tok-builtin">' + word + '</span>';
+      else out += escapeHtml(word);
+      i = j;
+      continue;
+    }
+    // Operators / punctuation
+    if (/[+\-*/%^#=<>~]/.test(c)) {
+      let j = i + 1;
+      while (j < n && /[+\-*/%^#=<>~]/.test(src[j])) j++;
+      out += '<span class="tok-operator">' + escapeHtml(src.slice(i, j)) + '</span>';
+      i = j;
+      continue;
+    }
+    if (/[(){}\[\],;:]/.test(c)) {
+      out += '<span class="tok-punct">' + escapeHtml(c) + '</span>';
+      i++;
+      continue;
+    }
+    // Anything else (whitespace, etc.)
+    out += escapeHtml(c);
+    i++;
+  }
+  return out;
+}
+
+// ============================================================
+// Editor: gutter + line count + highlight + scroll sync
+// ============================================================
+const _editorState = { gutterEl: null, gutterInner: null, highlightEl: null, textareaEl: null };
+function getEditorRefs() {
+  if (_editorState.gutterEl) return _editorState;
+  _editorState.gutterEl = document.getElementById('editor-gutter');
+  _editorState.highlightEl = document.getElementById('editor-highlight');
+  _editorState.textareaEl = document.getElementById('code-input');
+  // Gutter inner wrapper for transform-based scroll sync
+  let inner = _editorState.gutterEl && _editorState.gutterEl.querySelector('.editor-gutter-inner');
+  if (!inner && _editorState.gutterEl) {
+    inner = document.createElement('div');
+    inner.className = 'editor-gutter-inner';
+    _editorState.gutterEl.appendChild(inner);
+  }
+  _editorState.gutterInner = inner;
+  return _editorState;
+}
+
+// Measure textarea's actual computed metrics (font, line-height, padding)
+// and apply them INLINE to the gutter/highlight/rows so all three layers
+// stay pixel-perfectly aligned. Called on every content change, not just
+// resize, so dynamic font/theme/size shifts can never desync the layers.
+//
+// IMPORTANT: every layer is set individually — CSS variables alone are not
+// enough, because each rule (e.g. `.editor-gutter-inner > div { height: var(--editor-line-height) }`)
+// reads the var at paint time and will desync if the var drifts from the
+// textarea's actual computed value (e.g. after font/theme/size changes).
+function syncEditorMetrics() {
+  const s = getEditorRefs();
+  if (!s.textareaEl || !s.gutterEl || !s.highlightEl) return;
+  const cs = getComputedStyle(s.textareaEl);
+  const fs = cs.fontSize;
+  const lhRaw = cs.lineHeight;
+  // line-height may be "normal" → resolve from fontSize * default ratio
+  let lh = lhRaw;
+  if (lhRaw === 'normal') {
+    const fsPx = parseFloat(fs);
+    lh = (fsPx ? fsPx * 1.2 : '1.2') + 'px';
+  }
+  const pt = cs.paddingTop, pb = cs.paddingBottom, pl = cs.paddingLeft, pr = cs.paddingRight;
+  // Apply directly to gutter (column + its inner wrapper + its row children)
+  s.gutterEl.style.fontSize = fs;
+  s.gutterEl.style.lineHeight = lh;
+  // Apply to highlight overlay
+  s.highlightEl.style.fontSize = fs;
+  s.highlightEl.style.lineHeight = lh;
+  s.highlightEl.style.paddingTop = pt;
+  s.highlightEl.style.paddingBottom = pb;
+  s.highlightEl.style.paddingLeft = pl;
+  s.highlightEl.style.paddingRight = pr;
+  // Gutter inner padding-top ensures line 1 aligns with the textarea's first line
+  if (s.gutterInner) {
+    s.gutterInner.style.paddingTop = pt;
+    s.gutterInner.style.fontSize = fs;
+    s.gutterInner.style.lineHeight = lh;
+  }
+  // Row heights themselves are applied by syncGutterRowHeights(), called
+  // AFTER updateGutter() in updateLineCount() — by that point the new rows
+  // exist and the freshly-measured line-height can be written onto them.
+  //
+  // CRITICAL: also force the textarea's height to its scrollHeight so it
+  // grows with content. Browsers don't auto-grow <textarea> with
+  // height:auto + overflow:hidden, so we set the height explicitly each
+  // input. This makes the textarea's visible box end at the same Y as the
+  // highlight/gutter's last line — the root cause of "Enter on last line
+  // misalignment" was that the textarea stayed clamped while the highlight
+  // and gutter kept growing.
+  s.textareaEl.style.height = s.textareaEl.scrollHeight + 'px';
+}
+
+function updateLineCount() {
+  const code = document.getElementById('code-input').value;
+  const lines = code.split('\n').length;
+  // line-count badge removed from header; keep the update call as a no-op
+  // so future re-introduction doesn't need to chase dead references.
+  const lcEl = document.getElementById('line-count');
+  if (lcEl) lcEl.textContent = lines + ' 行';
+  document.getElementById('stat-left-lines').textContent = '行: ' + lines;
+  document.getElementById('stat-left-chars').textContent = '字符: ' + code.length;
+  // Rebuild the gutter first so we know how many rows will exist.
+  updateGutter(lines);
+  // Now measure textarea and apply metrics (including forcing textarea height
+  // to scrollHeight so it grows with content — the textarea alone won't
+  // auto-grow under height:auto + overflow:hidden).
+  syncEditorMetrics();
+  // Apply freshly-measured row height to each new gutter div.
+  syncGutterRowHeights();
+  // Rebuild the highlight overlay AFTER the textarea has grown — otherwise
+  // the highlight's content would be sized to the old (pre-grow) textarea
+  // and the visible caret on the new last line would sit below the
+  // highlight's last visible row.
+  updateHighlight(code);
+  // Defer scroll-sync one frame so layout has settled after the input
+  // (prevents the gutter being one row out of sync when Enter expands the
+  // textarea on the last line — the .editor-scroll auto-scroll fires after
+  // this handler returns).
+  requestAnimationFrame(syncGutterScroll);
+}
+
+function updateGutter(totalLines) {
+  const s = getEditorRefs();
+  if (!s.gutterInner) return;
+  const html = [];
+  for (let i = 1; i <= totalLines; i++) html.push('<div>' + i + '</div>');
+  s.gutterInner.innerHTML = html.join('');
+}
+
+// Apply the textarea's measured line-height to every gutter row, so the
+// row height is always in sync — not just at first paint, but after every
+// resize, font change, or theme toggle.
+function syncGutterRowHeights() {
+  const s = getEditorRefs();
+  if (!s.gutterInner || !s.textareaEl) return;
+  const cs = getComputedStyle(s.textareaEl);
+  let lh = cs.lineHeight;
+  if (lh === 'normal') {
+    const fsPx = parseFloat(cs.fontSize);
+    lh = (fsPx ? fsPx * 1.2 : '1.2') + 'px';
+  }
+  const rows = s.gutterInner.children;
+  for (let i = 0; i < rows.length; i++) {
+    rows[i].style.height = lh;
+    rows[i].style.lineHeight = lh;
+  }
+}
+
+function updateHighlight(code) {
+  const s = getEditorRefs();
+  if (!s.highlightEl) return;
+  // No trailing '\n' — that's what caused the one-row offset between
+  // textarea caret and gutter on the last line (B1).
+  s.highlightEl.innerHTML = highlightLua(code);
+}
+
+function syncGutterScroll() {
+  const s = getEditorRefs();
+  const scrollEl = document.getElementById('editor-scroll');
+  if (!s.gutterInner || !scrollEl) return;
+  const top = scrollEl.scrollTop;
+  s.gutterInner.style.transform = 'translateY(' + (-top) + 'px)';
+  // highlight lives inside .editor-scroll and scrolls with it automatically
+}
+// (Single resize listener attached in initUI() — supersedes the older one.)
+
+function appendOutput(text, cls, opts) {
+  const el = document.getElementById('output');
+  if (!el) return;  // page state not ready yet (defensive — init race)
+  const span = document.createElement('span');
+  span.className = cls || '';
+  if (opts && opts.code) {
+    // Render as Lua source with syntax highlighting
+    span.classList.add('output-code');
+    span.innerHTML = highlightLua(text);
+  } else {
+    span.textContent = text;
+  }
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearOutput() {
+  const el = document.getElementById('output');
+  if (!el) return;
+  el.innerHTML = '<div class="placeholder"><div class="placeholder-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3"/><path d="M16 9l4 3-4 3"/><path d="M14 5l-4 14"/></svg></div><span class="placeholder-title">暂无输出</span><span class="placeholder-hint">点击「混淆」或「运行原代码」开始</span></div>';
+  const st = document.getElementById('output-status');
+  if (st) { st.textContent = '就绪'; st.className = 'badge'; }
+  document.getElementById('stat-obf-size').textContent = '混淆后: -';
+  document.getElementById('stat-ratio').textContent = '膨胀比: -';
+  document.getElementById('stat-time').textContent = '耗时: -';
+}
+
+function setStatus(s, cls) {
+  // output-status badge removed from header — fall through silently.
+  const el = document.getElementById('output-status');
+  if (el) {
+    el.textContent = s;
+    el.className = 'badge' + (cls === 'ok' ? ' status-ok' : cls === 'err' ? ' status-err' : cls === 'warn' ? ' status-warn' : '');
+  }
+  // header-status element was also removed in a prior pass — guard for it too.
+  const head = document.getElementById('header-status');
+  if (head) head.textContent = s;
+}
+
 // ============================================================
 // UI 初始化
 // ============================================================
 function initUI() {
+  // Theme is initialized earlier by initTheme() — see top of script.
+  // Wire the theme button here so we know it's in the DOM.
+  const themeBtn = document.getElementById('theme-toggle');
+  if (themeBtn && !themeBtn.dataset.bound) {
+    themeBtn.dataset.bound = '1';
+    themeBtn.addEventListener('click', toggleTheme);
+  }
+
   const container = document.getElementById('feature-toggles');
-  FEATURES.forEach(f => {
-    const label = document.createElement('label');
-    label.innerHTML = `<input type="checkbox" data-feat="${f.id}" ${f.default ? 'checked' : ''}> ${f.name} <span style="color:var(--fg2);font-size:10px">${f.desc}</span>`;
-    label.className = f.default ? 'on' : '';
-    label.querySelector('input').addEventListener('change', e => {
-      config[f.id] = e.target.checked;
-      label.className = e.target.checked ? 'on' : '';
-      markCustomPreset();
+  FEATURE_GROUPS.forEach(g => {
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'feature-group';
+    groupDiv.innerHTML = '<div class="feature-group-title">' + g.title + '</div><div class="feature-list"></div>';
+    const list = groupDiv.querySelector('.feature-list');
+    g.ids.forEach(id => {
+      const f = FEATURES.find(x => x.id === id);
+      if (!f) return;
+      const label = document.createElement('label');
+      label.className = 'feature-toggle';
+      label.innerHTML = '<input type="checkbox" data-feat="' + f.id + '"' + (f.default ? ' checked' : '') + ' aria-label="' + f.name + '"><span class="feat-info"><span class="feat-name">' + f.name + '</span><span class="feat-desc">' + f.desc + '</span></span>';
+      const cb = label.querySelector('input');
+      cb.addEventListener('change', e => {
+        config[f.id] = e.target.checked;
+        markCustomPreset();
+      });
+      list.appendChild(label);
     });
-    container.appendChild(label);
+    container.appendChild(groupDiv);
   });
-  document.querySelectorAll('#preset-row input[type=radio]').forEach(r => {
-    r.addEventListener('change', e => { if (e.target.checked) applyPreset(e.target.value); });
+  // Preset buttons (data-preset) — single delegated click handler
+  document.getElementById('preset-row').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-preset]');
+    if (!btn) return;
+    applyPreset(btn.dataset.preset);
   });
   applyPreset('balanced', { silent: true });
+  syncEditorMetrics();
+  // Position the sliding seg pill on initial layout
+  requestAnimationFrame(() => { syncSegPill(); });
   updateLineCount();
-  document.getElementById('code-input').addEventListener('input', updateLineCount);
+  const codeInput = document.getElementById('code-input');
+  const scrollEl = document.getElementById('editor-scroll');
+  codeInput.addEventListener('input', updateLineCount);
+  if (scrollEl) scrollEl.addEventListener('scroll', syncGutterScroll, { passive: true });
+  // Re-sync metrics on resize / theme change so gutter stays aligned
+  window.addEventListener('resize', () => { syncEditorMetrics(); syncSegPill(); syncGutterScroll(); });
+  setupMobileDrawer();
 }
 
 function toggleAll() {
@@ -10213,120 +13121,64 @@ function toggleAll() {
   FEATURES.forEach(f => {
     config[f.id] = !anyOn;
     const cb = document.querySelector(`input[data-feat="${f.id}"]`);
-    if (cb) { cb.checked = !anyOn; cb.parentElement.className = !anyOn ? 'on' : ''; }
+    if (cb) { cb.checked = !anyOn; cb.closest('.feature-toggle').className = 'feature-toggle' + (!anyOn ? ' on' : ''); }
   });
   markCustomPreset();
 }
 
-function updateLineCount() {
-  const code = document.getElementById('code-input').value;
-  const lines = code.split('\n').length;
-  document.getElementById('line-count').textContent = lines + ' 行';
-  document.getElementById('stat-left-lines').textContent = '行: ' + lines;
-  document.getElementById('stat-left-chars').textContent = '字符: ' + code.length;
-}
-
 // ============================================================
-// 输出面板
+// Mobile drawer — options panel slides in on mobile
 // ============================================================
-function appendOutput(text, cls) {
-  const el = document.getElementById('output');
-  const span = document.createElement('span');
-  span.className = cls || '';
-  span.textContent = text;
-  el.appendChild(span);
-  el.scrollTop = el.scrollHeight;
-}
+function setupMobileDrawer() {
+  const nav = document.getElementById('glass-nav');
+  if (!nav || document.getElementById('mobile-drawer-btn')) return;
 
-function clearOutput() {
-  document.getElementById('output').innerHTML = '<span class="dim">已清空</span>';
-  document.getElementById('output-status').textContent = '就绪';
-  document.getElementById('stat-obf-size').textContent = '混淆后: -';
-  document.getElementById('stat-ratio').textContent = '膨胀比: -';
-  document.getElementById('stat-time').textContent = '耗时: -';
-}
+  // Insert toggle button at end of nav
+  const btn = document.createElement('button');
+  btn.id = 'mobile-drawer-btn';
+  btn.className = 'mobile-drawer-btn';
+  btn.title = '选项';
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+  nav.insertBefore(btn, nav.firstChild);
 
-function setStatus(s, cls) {
-  const el = document.getElementById('output-status');
-  el.textContent = s;
-  el.style.color = cls === 'ok' ? 'var(--accent2)' : cls === 'err' ? 'var(--err)' : 'var(--fg2)';
-}
+  // Scrim
+  const scrim = document.createElement('div');
+  scrim.id = 'drawer-scrim';
+  scrim.className = 'drawer-scrim';
+  document.body.appendChild(scrim);
 
-// ============================================================
-// Lua VM (Fengari)
-// ============================================================
-function runLua(code, label) {
-  appendOutput(`\n━━━ ${label} ━━━\n`, 'info');
-  const t0 = performance.now();
-  const TIMEOUT_MS = 5000;
-  try {
-    const lauxlib = fengari.lauxlib;
-    const lualib = fengari.lualib;
-    const lua = fengari.lua;
+  const openDrawer = () => {
+    document.body.classList.add('drawer-open');
+    scrim.classList.add('open');
+  };
+  const closeDrawer = () => {
+    document.body.classList.remove('drawer-open');
+    scrim.classList.remove('open');
+  };
 
-    const L = lauxlib.luaL_newstate();
-    lualib.luaL_openlibs(L);
-
-    // Override print
-    lua.lua_pushcfunction(L, function(L) {
-      const n = lua.lua_gettop(L);
-      const parts = [];
-      for (let i = 1; i <= n; i++) {
-        lua.lua_getglobal(L, fengari.to_luastring('tostring'));
-        lua.lua_pushvalue(L, i);
-        lua.lua_call(L, 1, 1);
-        const s = lua.lua_tojsstring(L, -1);
-        parts.push(s);
-        lua.lua_pop(L, 1);
-      }
-      appendOutput(parts.join('\t') + '\n', '');
-      return 0;
+  btn.addEventListener('click', () => {
+    if (document.body.classList.contains('drawer-open')) closeDrawer();
+    else openDrawer();
+  });
+  scrim.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.body.classList.contains('drawer-open')) closeDrawer();
+  });
+  // Close drawer when running an action on mobile
+  document.querySelectorAll('.btn-group .btn, .seg button').forEach(b => {
+    b.addEventListener('click', () => {
+      if (window.matchMedia('(max-width:768px)').matches) closeDrawer();
     });
-    lua.lua_setglobal(L, fengari.to_luastring('print'));
+  });
+}
 
-    // Set timeout hook (check elapsed time every 5000 instructions)
-    lua.lua_sethook(L, function(L, ar) {
-      if (performance.now() - t0 > TIMEOUT_MS) {
-        lauxlib.luaL_error(L, fengari.to_luastring('execution timeout (> ' + TIMEOUT_MS + 'ms)'));
-      }
-    }, lua.LUA_MASKCOUNT, 5000);
-
-    // Load and run
-    const codeBytes = fengari.to_luastring(code);
-    const chunkName = fengari.to_luastring('=' + label);
-    const status = lauxlib.luaL_loadbuffer(L, codeBytes, codeBytes.length, chunkName);
-
-    if (status !== lua.LUA_OK) {
-      const err = lua.lua_tojsstring(L, -1);
-      appendOutput('编译错误: ' + err + '\n', 'error');
-      
-      setStatus('错误', 'err');
-      return false;
-    }
-
-    const callStatus = lua.lua_pcall(L, 0, -1, 0);
-    if (callStatus !== lua.LUA_OK) {
-      const err = lua.lua_tojsstring(L, -1);
-      appendOutput('运行错误: ' + err + '\n', 'error');
-      
-      setStatus('错误', 'err');
-      return false;
-    }
-
-    const elapsed = (performance.now() - t0).toFixed(1);
-    appendOutput(`完成 (${elapsed}ms)\n`, 'success');
-    
-    return true;
-  } catch (e) {
-    appendOutput('异常: ' + e.message + '\n', 'error');
-    setStatus('错误', 'err');
-    return false;
-  }
-}function obfuscate(sourceCode) {
+function obfuscate(sourceCode) {
   const t0 = performance.now();
   if (!_luaObfuscatorReady) {
-    appendOutput('Lua引擎未就绪: ' + (_luaInitError || '未知错误') + '\n', 'error');
-    throw new Error('Lua引擎未就绪');
+    if (_luaMainReady && !_luaWorkerReady) {
+      throw new Error('Lua引擎正在初始化（首次加载约 2-5 秒），请稍候');
+    }
+    throw new Error('Lua引擎未就绪' + (_luaInitError ? ': ' + _luaInitError : ''));
   }
   const luaOpts = buildLuaOpts();
   const code = obfuscateLua(sourceCode, luaOpts);
@@ -10337,7 +13189,10 @@ function runLua(code, label) {
 function obfuscateAsync(sourceCode) {
   const t0 = performance.now();
   if (!_luaObfuscatorReady) {
-    return Promise.reject(new Error('Lua引擎未就绪: ' + (_luaInitError || '未知错误')));
+    if (_luaMainReady && !_luaWorkerReady) {
+      return Promise.reject(new Error('Lua引擎正在初始化（首次加载约 2-5 秒），请稍候'));
+    }
+    return Promise.reject(new Error('Lua引擎未就绪' + (_luaInitError ? ': ' + _luaInitError : '')));
   }
   const luaOpts = buildLuaOpts();
   return obfuscateLuaAsync(sourceCode, luaOpts).then(code => {
@@ -10352,6 +13207,19 @@ function doObfuscate() {
   const source = document.getElementById('code-input').value;
   if (!source.trim()) { appendOutput('请先输入代码\n', 'warn'); return; }
 
+  // If the engine is still warming up (first-load fengari+obfuscator bundle),
+  // tell the user instead of dumping a cryptic "Lua引擎未就绪: 未知错误".
+  if (!_luaObfuscatorReady) {
+    if (_luaMainReady && !_luaWorkerReady) {
+      appendOutput('Lua引擎正在初始化（首次加载约 2-5 秒），请稍候再试\n', 'warn');
+    } else if (_luaInitError) {
+      appendOutput('Lua引擎初始化失败: ' + _luaInitError + '\n请检查浏览器控制台\n', 'error');
+    } else {
+      appendOutput('Lua引擎尚未就绪，请稍候\n', 'warn');
+    }
+    return;
+  }
+
   clearOutput();
   appendOutput('混淆中...\n', 'info');
   showLoading('混淆中...');
@@ -10362,7 +13230,12 @@ function doObfuscate() {
   // Use async version to avoid blocking UI
   obfuscateAsync(source).then(result => {
     console.log('[doObfuscate] Success');
-    appendOutput(result.code + '\n', '');
+    const out = document.getElementById('output');
+    if (!out) return;
+    // Clear the "混淆中..." message and replace with the obfuscated code (highlighted)
+    out.innerHTML = '';
+    appendOutput(result.code, '', {code: true});
+    appendOutput('\n', '');
     document.getElementById('stat-obf-size').textContent = '混淆后: ' + result.obfuscatedSize + ' 字节';
     document.getElementById('stat-ratio').textContent = '膨胀比: ' + (result.obfuscatedSize / result.originalSize).toFixed(1) + 'x';
     document.getElementById('stat-time').textContent = '耗时: ' + result.elapsed + 'ms';
@@ -10526,8 +13399,11 @@ function loadExample(name) {
   const right = document.getElementById('panel-right');
   let dragging = false;
 
+  // Cached MediaQueryList — creating one inside a high-frequency handler
+  // (mousemove during drag) is wasteful. Resolved once per session.
+  const mobileMql = window.matchMedia('(max-width:768px)');
+  function isMobile(){ return mobileMql.matches; }
   resizer.addEventListener('mousedown', e => { dragging = true; e.preventDefault(); });
-  function isMobile(){return window.matchMedia('(max-width:768px)').matches}
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
     if (isMobile()) return;
@@ -10585,27 +13461,27 @@ function renderBatchList() {
   const done = batchFiles.filter(f => f.status === 'done').length;
   const errs = batchFiles.filter(f => f.status === 'error').length;
   const proc = batchFiles.filter(f => f.status === 'processing').length;
-  let html = '<div style="margin-bottom:8px;font-size:13px">已导入 ' + batchFiles.length + ' 个文件';
-  if (proc > 0) html += ' · <span class="info">处理中 ' + (done+errs+1) + '/' + batchFiles.length + '</span>';
+  let html = '<div class="batch-header">已导入 ' + batchFiles.length + ' 个文件';
+  if (proc > 0) html += ' 路 <span class="info">澶勭悊涓?' + (done+errs+1) + '/' + batchFiles.length + '</span>';
   else if (done > 0) html += ' · <span class="success">完成 ' + done + '</span>' + (errs ? ' <span class="error">失败 ' + errs + '</span>' : '');
   html += '</div>';
-  html += '<div style="display:flex;gap:6px;margin-bottom:10px">';
-  html += '<button class="primary" onclick="batchProcess()" style="font-size:11px">混淆全部</button>';
-  html += '<button onclick="batchClear()" style="font-size:11px">清空</button>';
-  html += '<button onclick="batchDownloadAll()" style="font-size:11px">下载全部</button>';
+  html += '<div class="batch-actions">';
+  html += '<button class="btn btn-primary" onclick="batchProcess()">处理全部</button>';
+  html += '<button class="btn btn-ghost" onclick="batchClear()">清空</button>';
+  html += '<button class="btn btn-ghost" onclick="batchDownloadAll()">下载全部</button>';
   html += '</div>';
   batchFiles.forEach((f, i) => {
-    const cls = f.status === 'done' ? 'success' : f.status === 'error' ? 'error' : f.status === 'processing' ? 'info' : 'dim';
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">';
-    html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</span>';
-    html += '<span class="' + cls + '" style="font-size:11px;min-width:50px;text-align:center">';
+    const cls = f.status === 'done' ? 'done' : f.status === 'error' ? 'error' : f.status === 'processing' ? 'processing' : 'pending';
+    html += '<div class="batch-file-row">';
+    html += '<span class="fname">' + f.name + '</span>';
+    html += '<span class="fstatus ' + cls + '">';
     html += f.status === 'done' ? '完成' : f.status === 'error' ? '失败' : f.status === 'processing' ? '处理中' : '等待';
     html += '</span>';
-    if (f.status === 'done') html += '<button data-action="download" data-idx="' + i + '" style="font-size:10px;padding:2px 6px">下载</button>';
-    html += '<button data-action="remove" data-idx="' + i + '" style="font-size:10px;padding:2px 6px;color:var(--err);background:none;border:none;cursor:pointer">x</button>';
+    if (f.status === 'done') html += '<button class="fbtn-dl" data-action="download" data-idx="' + i + '">下载</button>';
+    html += '<button class="fbtn" data-action="remove" data-idx="' + i + '">×</button>';
     html += '</div>';
   });
-  if (errs > 0) html += '<div class="dim" style="margin-top:8px">失败: ' + errs + ' 个</div>';
+  if (errs > 0) html += '<div class="dim" style="margin-top:8px;padding:0 22px">失败: ' + errs + ' 个</div>';
   out.innerHTML = html;
   // Event delegation for buttons
   out.querySelectorAll('button[data-action]').forEach(btn => {
@@ -10683,14 +13559,28 @@ function initBatchDropZone() {
 }
 
 // Init Lua engine first, then UI
+// Run theme init first so the toggle button's listener and ripple state
+// are ready before initUI binds it (defensive — handlers are idempotent).
+initTheme();
 initLuaObfuscator();
 initObfuscateWorker();
 initUI();
 initBatchDropZone();
+// Scroll-edge glass-nav hairline (DESIGN motion.md 搂4: scroll edge, not hard divider)
+(function() {
+  const nav = document.getElementById('glass-nav');
+  if (!nav) return;
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 
 if (!_luaObfuscatorReady) {
-  appendOutput('Lua引擎初始化失败: ' + (_luaInitError || 'unknown') + '\n', 'error');
-  appendOutput('请检查浏览器控制台\n', 'warn');
+  // Engine is still warming up (fengari + obfuscator bundle can take a few
+  // seconds on first load). Don't dump an "初始化失败" message into the
+  // output panel — it's misleading, the engine isn't broken, just loading.
+  // The obfuscate button is gated so the user can't click before ready.
+  console.log('[Main] Lua engine still warming up; obfuscate gated until ready.');
 }
 </script>
 </body>

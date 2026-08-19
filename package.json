@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "lua-obfuscator",
-  "version": "3.0.0",
+  "version": "3.4.0",
   "description": "Lua code obfuscator with VM bytecode virtualization",
   "author": "Rainy_qwq",
   "license": "MIT",
@@ -9,6 +9,7 @@
     "url": "https://github.com/Rainyqwq/Lua-Obfuscator.git"
   },
   "dependencies": {
-    "fengari-web": "^0.1.4"
+    "fengari-web": "^0.1.4",
+    "jsdom": "^30.0.1"
   }
 }
