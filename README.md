@@ -7,12 +7,12 @@ Lua 代码混淆工具，支持多种混淆技术和 VM 字节码虚拟化保护
 
 ## v3.4.0 更新亮点
 
-- 🎨 **主题切换扩散动画**：基于 `document.startViewTransition`（Chrome 111+/Edge 111+），0.28s linear wipe，从按钮位置圆形扩散/收缩；旧浏览器走 JS fallback 兜底
-- 🐛 **编辑器光标错位修复**：强制 `textarea.style.height = scrollHeight` 让 textarea 跟内容长高，caret 与 gutter 行号偏差 ≤ 0.19px
-- ✅ **VM 高级模式生效**：JS 桥按 `typeof` 分发 boolean/string/number/array/null，不再把 `vm_mode='advanced'` 推成 boolean 丢弃
-- 🎯 **可访问性**：`prefers-reduced-motion` / `prefers-reduced-transparency` / `prefers-contrast` 三条 media query 完整覆盖
-- 🪛 **代码健壮性**：9 处隐藏 bug 修复（worker race / memory leak / null deref / 重复 resize listener 等）
-- 🎨 **设计 token 化**：补 `--danger` / `--warn`（含 dark 变体），5 处硬编码替换
+-  **主题切换添加扩散动画**：基于 `document.startViewTransition`（Chrome 111+/Edge 111+），0.28s linear wipe，从按钮位置圆形扩散/收缩；旧浏览器走 JS fallback 兜底
+-  **修复编辑器光标错位**：强制 `textarea.style.height = scrollHeight` 让 textarea 跟内容长高，caret 与 gutter 行号偏差 ≤ 0.19px
+-  **解决VM 高级模式的bug**：JS 桥按 `typeof` 分发 boolean/string/number/array/null，不再把 `vm_mode='advanced'` 推成 boolean 丢弃
+-  **可访问性**：`prefers-reduced-motion` / `prefers-reduced-transparency` / `prefers-contrast` 三条 media query 完整覆盖
+-  **代码健壮性提升**： 修复9 处 bug（worker race / memory leak / null deref / 重复 resize listener 等）
+-  **设计 token 化**：补 `--danger` / `--warn`（含 dark 变体），5 处硬编码替换
 
 完整变更列表：[RELEASE_NOTES_v3.4.0.md](RELEASE_NOTES_v3.4.0.md)
 
