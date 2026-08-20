@@ -5,7 +5,7 @@ Lua 代码混淆工具，支持多种混淆技术和 VM 字节码虚拟化保护
 
 **当前版本：v3.4.0**
 
-## v3.4.0 更新亮点
+## v3.4.0 更新摘要
 
 -  **主题切换添加扩散动画**：基于 `document.startViewTransition`（Chrome 111+/Edge 111+），0.28s linear wipe，从按钮位置圆形扩散/收缩；旧浏览器走 JS fallback 兜底
 -  **修复编辑器光标错位**：强制 `textarea.style.height = scrollHeight` 让 textarea 跟内容长高，caret 与 gutter 行号偏差 ≤ 0.19px
